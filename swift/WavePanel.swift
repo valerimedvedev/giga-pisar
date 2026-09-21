@@ -107,16 +107,47 @@ private func axBounds(_ el: AXUIElement, _ range: CFRange) -> NSRect? {
 /// его не отдаёт: Chrome и Electron через раз, терминалы никогда).
 /// Сначала спрашиваем сам текст (AXSelectedText); если его нет, но диапазон
 /// выделения непустой, вызывающий может добыть текст через ⌘C.
-func selectedTextViaAX() -> (text: String?, length: Int) {
-    guard let el = axFocusedElement(), let sel = axSelectedRange(el), sel.length > 0
-    else { return (nil, 0) }
+/// silent — приложение про выделение не говорит вообще ничего: Pages,
+/// Keynote и Numbers рисуют текст на своём холсте, в фокусе у них
+/// AXScrollArea без единого текстового атрибута. Тогда о выделении судим
+/// по пункту «Скопировать» в меню (frontMenuShortcutEnabled).
+func selectedTextViaAX() -> (text: String?, length: Int, silent: Bool) {
+    guard let el = axFocusedElement(), let sel = axSelectedRange(el)
+    else { return (nil, 0, true) }
+    guard sel.length > 0 else { return (nil, 0, false) }
     var ref: CFTypeRef?
     if AXUIElementCopyAttributeValue(el, "AXSelectedText" as CFString, &ref) == .success,
        let s = ref as? String,
        !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        return (s, Int(sel.length))
+        return (s, Int(sel.length), false)
     }
-    return (nil, Int(sel.length))
+    return (nil, Int(sel.length), false)
+}
+
+/// Включён ли в меню активного приложения пункт с сочетанием ⌘+буква без
+/// других модификаторов. «Скопировать» включён, только когда что-то
+/// выделено, «Вставить» — когда есть куда вставлять: так узнаём то, о чём
+/// приложение молчит в Accessibility. Обход меню занимает десятки
+/// миллисекунд, поэтому зовём его только для молчунов.
+func frontMenuShortcutEnabled(_ char: String) -> Bool {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return false }
+    func attr(_ e: AXUIElement, _ n: String) -> CFTypeRef? {
+        var v: CFTypeRef?
+        return AXUIElementCopyAttributeValue(e, n as CFString, &v) == .success ? v : nil
+    }
+    let ax = AXUIElementCreateApplication(app.processIdentifier)
+    guard let bar = attr(ax, "AXMenuBar"), CFGetTypeID(bar) == AXUIElementGetTypeID()
+    else { return false }
+    for top in (attr(bar as! AXUIElement, "AXChildren") as? [AXUIElement] ?? []) {
+        for menu in (attr(top, "AXChildren") as? [AXUIElement] ?? []) {
+            for item in (attr(menu, "AXChildren") as? [AXUIElement] ?? []) {
+                guard (attr(item, "AXMenuItemCmdChar") as? String) == char,
+                      (attr(item, "AXMenuItemCmdModifiers") as? Int) == 0 else { continue }
+                return (attr(item, "AXEnabled") as? Bool) ?? false
+            }
+        }
+    }
+    return false
 }
 
 /// Что известно про фокус: поле есть, поля нет — или приложение молчит.
@@ -140,7 +171,11 @@ func textFocus() -> TextFocus {
         // действительно нет.
         return wakeAccessibility() ? .unknown : .notField
     }
-    guard axSelectedRange(el) != nil else { return .notField }
+    // Pages и родня диапазона не отдают, но вставка у них работает:
+    // спрашиваем про пункт «Вставить» в меню.
+    guard axSelectedRange(el) != nil else {
+        return frontMenuShortcutEnabled("V") ? .field : .notField
+    }
     var ref: CFTypeRef?
     let role = (AXUIElementCopyAttributeValue(el, "AXRole" as CFString, &ref) == .success
                 ? ref as? String : nil) ?? ""

@@ -1070,7 +1070,7 @@ final class App: NSObject, NSApplicationDelegate {
     func captureSelection() {
         selectionAtStart = nil
         guard !frontIsTerminal, Brain.shared.ready, Brain.shared.engineAvailable else { return }
-        let (text, length) = selectedTextViaAX()
+        let (text, length, silent) = selectedTextViaAX()
         if let text {
             selectionAtStart = text
             NSLog("Гига выделение: AX, \(text.count) знаков")
@@ -1080,7 +1080,10 @@ final class App: NSObject, NSApplicationDelegate {
         // Диапазон выделен, а сам текст приложение не отдаёт (Chrome,
         // Electron). Берём через ⌘C за пользователя, буфер возвращаем
         // как был: момент наш, никакой гонки с чужой вставкой тут нет.
-        guard length > 0, AXIsProcessTrusted() else { return }
+        // Pages, Keynote и Numbers не отдают даже диапазон. У них о выделении
+        // говорит пункт «Скопировать» в меню: включён, значит есть что брать.
+        guard AXIsProcessTrusted(),
+              length > 0 || (silent && frontMenuShortcutEnabled("C")) else { return }
         let pb = NSPasteboard.general
         let before = pb.changeCount
         let snapshot: [NSPasteboardItem] = (pb.pasteboardItems ?? []).map { item in
@@ -1096,7 +1099,9 @@ final class App: NSObject, NSApplicationDelegate {
                 NSLog("Гига выделение: ⌘C ничего не дал")
                 return
             }
-            if let s = pb.string(forType: .string),
+            // Файлы (Finder) и картинки без текста командами не правим.
+            let isFile = pb.types?.contains(.fileURL) ?? false
+            if !isFile, let s = pb.string(forType: .string),
                !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 self.selectionAtStart = s
                 NSLog("Гига выделение: через ⌘C, \(s.count) знаков")
