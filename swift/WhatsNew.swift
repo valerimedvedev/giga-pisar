@@ -8,13 +8,13 @@ import AppKit
 
 /// Что изменилось в ЭТОЙ версии. Обновлять при каждом выпуске вместе с номером.
 let WHATS_NEW: [String] = uiIsRussian ? [
-    "Мозг перед первым запуском смотрит, хватает ли свободной памяти, и предупреждает, если нейронка не влезет",
-    "Qwen теперь в сжатом виде: 1,9 ГБ вместо 2,5 и на 0,6 ГБ меньше в памяти, качество то же; уже скачанная остаётся",
-    "Qwen отвечает быстрее: выключено «размышление вслух»",
+    "Команды над выделенным текстом работают в Pages, Keynote и Numbers: выделил, зажал клавишу, сказал «сделай короче»",
+    "В Pages после диктовки больше нет лишней подсказки «курсор был не в тексте»",
+    "В меню Мозга у Qwen, скачанной раньше, показан её настоящий размер",
 ] : [
-    "Before its first start the Brain checks free memory and warns if the model won't fit",
-    "Qwen is now compressed: 1.9 GB instead of 2.5 and 0.6 GB less in memory, same quality; an already downloaded copy stays",
-    "Qwen answers faster: “thinking out loud” is off",
+    "Commands on selected text now work in Pages, Keynote and Numbers: select, hold the key, say “make it shorter”",
+    "No more spurious “the cursor wasn't in a text field” hint after dictating into Pages",
+    "The Brain menu shows the real size of a previously downloaded Qwen",
 ]
 
 /// Разбор поля notes из манифеста: словарь по языкам, список или строка.
