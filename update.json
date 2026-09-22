@@ -1,19 +1,19 @@
 {
-  "version": "3.6.5",
+  "version": "3.6.6",
   "downloads": [
-    "https://gitflic.ru/project/moznoazachem/giga/release/59d7cbbc-a58a-4da2-97f9-51fbe69c98b8/57f3ba6a-d82b-4881-bef9-90f87cdfb109/download",
-    "https://github.com/moznoazachem/giga-pisar/releases/download/v3.6.5/GigaPisar-3.6.5.zip"
+    "https://gitflic.ru/project/moznoazachem/giga/release/c1f50a48-2217-408c-8efa-35263db93eec/59a6d2df-18b5-4708-86ac-9a901b643fea/download",
+    "https://github.com/moznoazachem/giga-pisar/releases/download/v3.6.6/GigaPisar-3.6.6.zip"
   ],
   "notes": {
     "ru": [
-      "Мозг перед первым запуском проверяет свободную память и предупреждает, если нейронка не влезет",
-      "Qwen в сжатом виде: 1,9 ГБ вместо 2,5, качество то же; уже скачанная остаётся",
-      "Qwen отвечает быстрее"
+      "Команды над выделенным текстом работают в Pages, Keynote и Numbers",
+      "В Pages после диктовки нет лишней подсказки «курсор был не в тексте»",
+      "В меню Мозга у Qwen, скачанной раньше, показан её настоящий размер"
     ],
     "en": [
-      "The Brain checks free memory before its first start and warns if the model won't fit",
-      "Qwen is compressed: 1.9 GB instead of 2.5, same quality; an already downloaded copy stays",
-      "Qwen answers faster"
+      "Commands on selected text now work in Pages, Keynote and Numbers",
+      "No more spurious “cursor wasn't in a text field” hint after dictating into Pages",
+      "The Brain menu shows the real size of a previously downloaded Qwen"
     ]
   }
 }
