@@ -1,0 +1,4 @@
+# собирается build.sh из web/
+giga-pisar/assets/giga/
+giga-pisar/assets/vendor/
+dist/

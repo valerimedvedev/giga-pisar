@@ -149,9 +149,23 @@ const store = {
 // ─────────────────────────── сам мозг ───────────────────────────
 
 export class Brain extends EventTarget {
-  constructor() {
+  /**
+   * Всё необязательно — по умолчанию настройки страницы web/:
+   * @param chosenId     модель задана снаружи (иначе — выбор человека из localStorage)
+   * @param serverBase   адрес llama-server с GigaChat (OpenAI-совместимый)
+   * @param serverChat   (body, command, mode) => Promise<текст> — свой путь к серверу
+   *                     вместо прямого llama-server (плагин WordPress ходит через REST)
+   * @param serverHealth () => Promise<"ok"|"loading"|"absent">
+   * @param qwenUrls     откуда качать Qwen, по порядку
+   */
+  constructor({ chosenId = null, serverBase = SERVER_BASE, serverChat = null, serverHealth = null,
+                qwenUrls = null } = {}) {
     super();
-    this.chosenId = store.get("giga.brain") || "off";
+    this.chosenId = chosenId ?? (store.get("giga.brain") || "off");
+    this.serverBase = serverBase;
+    this.serverChatFn = serverChat;
+    this.serverHealthFn = serverHealth;
+    this.qwenUrls = qwenUrls ?? BRAIN_MODELS[1].urls;
     this.server = "unknown";       // unknown | ok | loading | absent
     this.qwen = "unknown";         // unknown | absent | downloading | ready | loaded
     this.qwenProgress = 0;
@@ -188,8 +202,12 @@ export class Brain extends EventTarget {
 
   async checkServer() {
     try {
-      const r = await fetch(SERVER_BASE + "health", { cache: "no-store" });
-      this.server = r.ok ? "ok" : r.status === 503 ? "loading" : "absent";
+      if (this.serverHealthFn) {
+        this.server = await this.serverHealthFn();
+      } else {
+        const r = await fetch(this.serverBase + "health", { cache: "no-store" });
+        this.server = r.ok ? "ok" : r.status === 503 ? "loading" : "absent";
+      }
     } catch {
       this.server = "absent";
     }
@@ -237,7 +255,6 @@ export class Brain extends EventTarget {
   /** Качает Qwen в хранилище браузера и сразу поднимает его в память. */
   async downloadQwen() {
     if (this.qwen === "downloading") return;
-    const model = BRAIN_MODELS[1];
     this.qwen = "downloading";
     this.qwenProgress = 0;
     this.lastError = null;
@@ -246,7 +263,7 @@ export class Brain extends EventTarget {
     const w = await this.getWllama();
     this.abort = new AbortController();
     let lastError;
-    for (const url of model.urls) {
+    for (const url of this.qwenUrls) {
       // своя копия на сайте есть не всегда — проверяем, прежде чем качать
       if (url.startsWith(location.origin)) {
         const probe = await fetch(url, { method: "HEAD" }).catch(() => null);
@@ -323,7 +340,7 @@ export class Brain extends EventTarget {
     let out;
     if (this.chosenId === "gigachat") {
       onStage(actionLabel(command));
-      out = await this.chatServer(messages);
+      out = this.serverChatFn ? await this.serverChatFn(body, command, mode) : await this.chatServer(messages);
     } else if (this.chosenId === "qwen") {
       if (this.qwen !== "loaded") {
         onStage(L("Запускаю нейронку…", "Starting the brain…"));
@@ -348,7 +365,7 @@ export class Brain extends EventTarget {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
-      const r = await fetch(SERVER_BASE + "v1/chat/completions", {
+      const r = await fetch(this.serverBase + "v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
