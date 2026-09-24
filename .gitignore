@@ -17,3 +17,8 @@ icon/drafts/
 # внутренняя передача контекста — не публиковать
 HANDOFF.md
 vendor/
+
+# браузерная версия: своя копия onnxruntime и модель рядом со страницей
+web/model/
+web/*.tar.gz
+node_modules/

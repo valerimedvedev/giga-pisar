@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Гига Писарь</title>
+  <meta name="description" content="Диктовка голосом в браузере на GigaAM v3. Звук не покидает компьютер.">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Гига Писарь</h1>
+      <p class="lead" data-en="Voice dictation right in the browser. Audio never leaves your computer.">Диктовка голосом прямо в браузере. Звук не покидает компьютер.</p>
+    </header>
+
+    <section id="model" class="card" hidden>
+      <h2 data-en="Speech model">Модель распознавания</h2>
+      <p data-en="Recognition needs the GigaAM v3 model: a 204 MB archive, downloaded once. The browser keeps it, so next time it loads offline.">
+        Для распознавания нужна модель GigaAM v3 — архив 204&nbsp;МБ, один раз.
+        Браузер сохранит её у себя, и в следующий раз она загрузится без сети.
+      </p>
+      <div class="actions">
+        <button id="model-server" type="button" hidden data-en="Download from this site">Скачать с этого сайта</button>
+        <label class="button" for="model-file" data-en="Choose the archive…">Выбрать архив…</label>
+        <input id="model-file" type="file" accept=".gz,.tgz,.onnx,.model,.yaml" multiple hidden>
+      </div>
+      <p class="hint">
+        <span data-en="No archive yet?">Архива ещё нет?</span>
+        <a id="archive-link" href="#" data-en="Download gigaam-v3-onnx-int8.tar.gz">Скачайте gigaam-v3-onnx-int8.tar.gz</a>
+        <span data-en="and pick it with the button above (or drop it onto this box).">и выберите его кнопкой выше (или перетащите сюда).</span>
+      </p>
+    </section>
+
+    <section class="card">
+      <label for="text" class="field-label" data-en="Text">Текст</label>
+      <textarea id="text" rows="10" spellcheck="true"
+        placeholder="Поставьте курсор, нажмите «Диктовать» и говорите"
+        data-en-placeholder="Place the cursor, press Dictate and speak"></textarea>
+      <div class="controls">
+        <button id="dictate" type="button" class="primary" disabled>Диктовать</button>
+        <p id="status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <footer>
+      <span id="storage"></span>
+      <button id="model-delete" type="button" class="link" hidden data-en="Remove the model from the browser">Удалить модель из браузера</button>
+    </footer>
+  </main>
+</body>
+</html>

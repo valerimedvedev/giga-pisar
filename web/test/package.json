@@ -1,0 +1,9 @@
+{
+  "name": "giga-pisar-web-test",
+  "private": true,
+  "type": "module",
+  "description": "Сверка браузерного ядра с питоновским в Node",
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
+  }
+}
