@@ -1,0 +1,30 @@
+[Unit]
+Description=Гига Писарь: мозг GigaChat (llama-server)
+After=network.target
+
+[Service]
+Type=simple
+User=pisar
+Group=pisar
+WorkingDirectory=/opt/pisar-brain
+Environment=LD_LIBRARY_PATH=/opt/pisar-brain/bin
+# -t задаётся в /etc/default/pisar-brain (deploy.sh пишет туда половину ядер)
+EnvironmentFile=-/etc/default/pisar-brain
+ExecStart=/opt/pisar-brain/bin/llama-server \
+    --model /opt/pisar-brain/models/GigaChat3.1-10B-A1.8B-q4_K_M.gguf \
+    --host 127.0.0.1 --port 8091 \
+    --ctx-size 8192 --parallel 2 --jinja --no-webui \
+    --threads ${PISAR_THREADS}
+Restart=on-failure
+RestartSec=5
+# Не даём мозгу съесть сервер целиком
+MemoryMax=9G
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/pisar-brain
+
+[Install]
+WantedBy=multi-user.target

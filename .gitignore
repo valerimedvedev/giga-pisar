@@ -22,3 +22,4 @@ vendor/
 web/model/
 web/*.tar.gz
 node_modules/
+web/brain-models/

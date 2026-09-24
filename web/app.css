@@ -116,6 +116,32 @@ button.link {
   font-size: 14px;
 }
 
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+.chips button:not(.link) { padding: 6px 12px; font-size: 14px; }
+
+.brain-models { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.brain-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.brain-row:has(input:checked) { border-color: var(--accent); }
+.brain-row input { accent-color: var(--accent); margin: 0; }
+.brain-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.brain-text .hint { font-size: 14px; }
+.brain-actions { display: flex; gap: 8px; }
+.brain-actions button { padding: 6px 12px; font-size: 14px; }
+
 #status[data-kind="recording"] { color: var(--rec); }
 #status[data-kind="ok"] { color: var(--accent); }
 #status[data-kind="warn"] { color: var(--warn); }

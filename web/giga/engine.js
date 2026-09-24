@@ -3,7 +3,7 @@
 
 const ORT_VERSION = "1.30.0";
 
-/** Где искать onnxruntime-web: своя копия (web/vendor, см. fetch-ort.sh), потом CDN. */
+/** Где искать onnxruntime-web: своя копия (web/vendor, см. fetch-vendor.sh), потом CDN. */
 export const DEFAULT_ORT_URLS = [
   new URL("../vendor/ort/ort.wasm.min.mjs", import.meta.url).href,
   `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/ort.wasm.min.mjs`,

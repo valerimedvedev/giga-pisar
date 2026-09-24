@@ -42,6 +42,22 @@
         <button id="dictate" type="button" class="primary" disabled>Диктовать</button>
         <p id="status" role="status" aria-live="polite"></p>
       </div>
+      <div id="chips" class="chips" hidden>
+        <!-- кнопки мозга: над выделенным, а без выделения — над всем текстом -->
+        <button id="revert" type="button" class="link" hidden data-en="Put it back">Вернуть как было</button>
+      </div>
+    </section>
+
+    <section id="brain" class="card">
+      <h2 data-en="Pisar's brain">Мозг Писаря</h2>
+      <p class="hint" data-en="A neural network tidies up dictated text. Say “…, Pisar, fix it” (or “shorten”, “translate to English”) at the end of dictation. Select text and dictate a command to apply it to the selection. The buttons under the text work on the selection or on the whole text.">
+        Нейронка причёсывает надиктованное. Скажите в конце диктовки
+        «…, Писарь, исправь» (или «сократи», «переведи на английский»).
+        Выделите текст и продиктуйте команду — она выполнится над выделенным.
+        Кнопки под текстом работают над выделенным или над всем текстом.
+      </p>
+      <div id="brain-models" class="brain-models" role="radiogroup" aria-label="Мозг"></div>
+      <p id="brain-status" class="hint" aria-live="polite"></p>
     </section>
 
     <footer>
