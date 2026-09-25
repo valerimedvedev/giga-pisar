@@ -257,7 +257,23 @@ function giga_pisar_diagnostics_box() {
 			<table class="widefat striped" id="giga-pisar-diag"><tbody>
 				<tr><td><?php esc_html_e( 'Проверяю…', 'giga-pisar' ); ?></td></tr>
 			</tbody></table>
-			<p class="description"><?php esc_html_e( 'Где кнопки: плавающий микрофон — у края поля, где стоит курсор; в блочном редакторе — значок микрофона на панели выбранного блока с текстом; в классическом — на панели форматирования.', 'giga-pisar' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Где кнопки: плавающий микрофон — у края поля, где стоит курсор; в блочном редакторе — значок микрофона на панели выбранного блока с текстом; в классическом — на панели форматирования. Окно «⚙ Мозг» (нейронка на вашем компьютере): правый клик по микрофону, кнопка ⚙ в подсказке после диктовки или кнопка ниже.', 'giga-pisar' ); ?></p>
+			<p><button type="button" class="button" id="gp-brain-btn" hidden>⚙ <?php esc_html_e( 'Мозг на моём компьютере', 'giga-pisar' ); ?></button>
+				<span id="gp-brain-note" class="description"></span></p>
+			<script>
+			( function () {
+				const btn = document.getElementById( 'gp-brain-btn' ), note = document.getElementById( 'gp-brain-note' );
+				const arm = () => {
+					if ( window.GigaPisar && window.GigaPisar.brainSettings ) {
+						btn.hidden = false;
+						btn.addEventListener( 'click', () => window.GigaPisar.brainSettings() );
+					} else {
+						note.textContent = <?php echo wp_json_encode( __( 'Окно «⚙ Мозг» появится, когда на вкладке «Мозг» включён мозг Писаря, он доступен вам и разрешён «Мозг на компьютере пользователя».', 'giga-pisar' ) ); ?>;
+					}
+				};
+				if ( window.GigaPisar ) { arm(); } else { document.addEventListener( 'giga-pisar-ready', arm, { once: true } ); }
+			}() );
+			</script>
 			<script>
 			( function () {
 				const tbody = document.querySelector( '#giga-pisar-diag tbody' );

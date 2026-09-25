@@ -358,6 +358,15 @@ class Pisar {
     this.brain = cfg.brain ? this.makeBrain(cfg.brain) : null;
 
     this.ext = null;                   // блок редактора, у которого стоит кнопка (float())
+    // правый клик по микрофону — настройки мозга (если сайт разрешил свой мозг)
+    this.ui.fab.addEventListener("contextmenu", (e) => {
+      if (!this.brain || !cfg.brainLocal) return;
+      e.preventDefault();
+      if (this.state === "idle") this.brainSettings();
+    });
+    this.ui.fab.title = this.brain && cfg.brainLocal
+      ? L("Голосовой ввод · правый клик — мозг", "Voice input · right-click — brain")
+      : L("Голосовой ввод", "Voice input");
     this.ui.fab.addEventListener("click", () => {
       if (this.field) this.toggle(this.adapterFor(this.field));
       else if (this.ext) this.toggle(this.ext.adapter, this.ext.el);
@@ -892,6 +901,8 @@ async function diagnose() {
 const pisar = new Pisar();
 window.GigaPisar = {
   diagnose,
+  /** Окно «⚙ Мозг» (нейронка на компьютере человека); null — сайт этого не разрешил. */
+  brainSettings: pisar.brain && cfg.brainLocal ? () => pisar.brainSettings() : null,
   /** Плавающая кнопка у блока редактора: { el, adapter } или null. */
   float: (target) => pisar.float(target),
   /** adapter — как у полей выше: selection/insert/replace/wholeText/undo/anchor. */
