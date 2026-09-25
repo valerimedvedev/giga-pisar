@@ -129,7 +129,7 @@ function giga_pisar_settings_page() {
 				</td></tr>
 				<tr><th scope="row"><?php esc_html_e( 'Мозг на компьютере пользователя', 'giga-pisar' ); ?></th><td>
 					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'brain_local' ) ); ?>" value="1" <?php checked( $o['brain_local'] ); ?>> <?php esc_html_e( 'Разрешить пользователю подключить свою нейронку', 'giga-pisar' ); ?></label>
-					<p class="description"><?php esc_html_e( 'Человек ставит у себя программу с нейронкой (Ollama, LM Studio или наш brain-local из репозитория) и в подсказке Писаря (⚙) указывает её адрес. Страница ходит к ней по http://127.0.0.1 напрямую, текст на сайт не отправляется. Любая модель, которую он туда поставит; на компьютере с 32 ГБ памяти — GigaChat, Qwen3-14B, YandexGPT и т. п. — быстрее, чем на сервере.', 'giga-pisar' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Человек ставит у себя программу с нейронкой (GigaBrain.exe из репозитория — один файл, сам всё скачает; или Ollama, LM Studio) и в подсказке Писаря (⚙) указывает её адрес. Страница ходит к ней по http://127.0.0.1 напрямую, текст на сайт не отправляется. Любая модель, которую он туда поставит; на компьютере с 32 ГБ памяти — GigaChat, Qwen3-14B, YandexGPT и т. п. — быстрее, чем на сервере.', 'giga-pisar' ); ?></p>
 				</td></tr>
 				<tr><th scope="row"><?php esc_html_e( 'Функции на кнопках', 'giga-pisar' ); ?></th><td>
 					<?php $chips = (array) $o['chips']; ?>

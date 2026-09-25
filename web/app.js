@@ -133,7 +133,7 @@ function modelState(m) {
   if (m.where === "local") {
     return {
       ok: L(`отвечает на ${brain.local.base}`, `answers at ${brain.local.base}`),
-      absent: L("не найден — запустите программу (см. brain-local)", "not found — start the app (see brain-local)"),
+      absent: L("не найден — запустите GigaBrain (см. brain-local)", "not found — start the app (see brain-local)"),
       nokey: L("просит ключ доступа", "asks for an access key"),
       unknown: L("ищу на компьютере…", "looking on this computer…"),
     }[brain.localState];
@@ -238,7 +238,7 @@ function renderBrain() {
   const m = brain.chosen;
   if (brain.lastError) note = L(`Мозг: ${brain.lastError}`, `Brain: ${brain.lastError}`);
   else if (m?.id === "gigachat" && brain.server !== "ok") note = L("GigaChat сейчас недоступен — выберите Qwen, он считает прямо в браузере.", "GigaChat is unavailable now — choose Qwen, it runs in the browser.");
-  else if (m?.id === "local" && brain.localState === "absent") note = L("На компьютере мозг не найден. Поставьте Ollama или наш brain-local (см. README) и нажмите «Проверить».", "No local brain found. Install Ollama or our brain-local (see README) and press Check.");
+  else if (m?.id === "local" && brain.localState === "absent") note = L("На компьютере мозг не найден. Запустите GigaBrain (brain-local/dist) или Ollama и нажмите «Проверить».", "No local brain found. Install Ollama or our brain-local (see README) and press Check.");
   else if (m?.id === "local" && brain.localState === "nokey") note = L("Введите ключ доступа, который показала программа при запуске, и нажмите «Проверить».", "Enter the access key the app printed at start and press Check.");
   else if (m?.id === "qwen" && brain.qwen === "absent") note = L("Нажмите «Скачать» — Qwen загрузится один раз и останется в браузере.", "Press Download — Qwen is fetched once and stays in the browser.");
   else if (m) note = L("Мозг готов. Скажите в конце диктовки «Писарь, исправь».", "The brain is ready. Say “Pisar, fix it” at the end of dictation.");

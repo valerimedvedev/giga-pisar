@@ -1,59 +1,122 @@
 {
-  "_comment": "Нейронки для мозга на своём компьютере. ram_gb — сколько памяти нужно с запасом на llama.cpp и контекст. Файлы — с Hugging Face; если ссылка устарела, возьмите любой .gguf через install.ps1 -ModelUrl / install.sh --url.",
+  "_comment": "Нейронки для мозга на своём компьютере — те, что удобно крутить локально для правки русского текста. ram_gb — памяти с запасом на llama.cpp и контекст 8K. Файлы — с Hugging Face (Q4_K_M: лучшее соотношение качества и размера). Если ссылка устарела, укажите любой .gguf адресом (GigaBrain --add <url>). GigaBrain.exe берёт свежий каталог с GitHub, а без сети — этот встроенный.",
   "models": [
     {
-      "id": "gigachat",
+      "id": "gigachat3.1-10b",
       "name": "GigaChat 3.1 10B-A1.8B",
-      "about": "Родной русский, лучше всех правит русский текст. Считает быстро: из 10 млрд параметров на каждое слово работают 1,8. По умолчанию.",
+      "vendor": "Сбер",
+      "about": "Родной русский, лучше всех правит русский текст. Быстрая: из 10 млрд параметров на каждое слово работают 1,8. По умолчанию.",
       "file": "GigaChat3.1-10B-A1.8B-q4_K_M.gguf",
       "url": "https://huggingface.co/ai-sage/GigaChat3.1-10B-A1.8B-GGUF/resolve/main/GigaChat3.1-10B-A1.8B-q4_K_M.gguf",
-      "size_gb": 6.5,
-      "ram_gb": 12
+      "size_gb": 6.5, "ram_gb": 12, "speed": "быстрая", "tier": "8–16 ГБ", "default": true
+    },
+    {
+      "id": "gigachat-20b-a3b",
+      "name": "GigaChat 20B-A3B",
+      "vendor": "Сбер",
+      "about": "Старшая GigaChat: умнее, тоже быстрая (3 млрд активных). Для 32 ГБ — лучший русский.",
+      "file": "GigaChat-20B-A3B-instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/ai-sage/GigaChat-20B-A3B-instruct-GGUF/resolve/main/GigaChat-20B-A3B-instruct-Q4_K_M.gguf",
+      "size_gb": 12.7, "ram_gb": 20, "speed": "быстрая", "tier": "32 ГБ"
+    },
+    {
+      "id": "yandexgpt-5-lite-8b",
+      "name": "YandexGPT 5 Lite 8B",
+      "vendor": "Яндекс",
+      "about": "Родной русский. Хороша для делового стиля, писем и правки.",
+      "file": "YandexGPT-5-Lite-8B-instruct-Q4_K_M.gguf",
+      "url": "https://huggingface.co/yandex/YandexGPT-5-Lite-8B-instruct-GGUF/resolve/main/YandexGPT-5-Lite-8B-instruct-Q4_K_M.gguf",
+      "size_gb": 5.0, "ram_gb": 10, "speed": "средняя", "tier": "8–16 ГБ"
+    },
+    {
+      "id": "t-pro-2.0-32b",
+      "name": "T-pro 2.0 32B",
+      "vendor": "Т-Банк",
+      "about": "Сильная русская модель на базе Qwen3-32B. Качество высокое, но на процессоре медленно — для видеокарты от 24 ГБ или терпеливых.",
+      "file": "T-pro-it-2.0-Q4_K_M.gguf",
+      "url": "https://huggingface.co/t-tech/T-pro-it-2.0-GGUF/resolve/main/T-pro-it-2.0-Q4_K_M.gguf",
+      "size_gb": 19.8, "ram_gb": 26, "speed": "медленная", "tier": "32 ГБ"
+    },
+    {
+      "id": "vikhr-nemo-12b",
+      "name": "Vikhr Nemo 12B",
+      "vendor": "Vikhr (Mistral Nemo, дообучена на русском)",
+      "about": "Русская дообучка Mistral Nemo. Хорошо держит стиль автора.",
+      "file": "Vikhr-Nemo-12B-Instruct-R-21-09-24-Q4_K_M.gguf",
+      "url": "https://huggingface.co/Vikhrmodels/Vikhr-Nemo-12B-Instruct-R-21-09-24-GGUF/resolve/main/Vikhr-Nemo-12B-Instruct-R-21-09-24-Q4_K_M.gguf",
+      "size_gb": 7.5, "ram_gb": 14, "speed": "средняя", "tier": "16 ГБ"
     },
     {
       "id": "qwen3-4b",
       "name": "Qwen3-4B Instruct",
-      "about": "Лёгкая и аккуратная; та же, что в браузере, но здесь в полной точности Q4 и быстрее.",
+      "vendor": "Alibaba",
+      "about": "Лёгкая и аккуратная; та же, что в браузере, но здесь в полной точности и быстрее.",
       "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
-      "size_gb": 2.5,
-      "ram_gb": 6
+      "size_gb": 2.5, "ram_gb": 6, "speed": "быстрая", "tier": "8 ГБ"
     },
     {
       "id": "qwen3-8b",
       "name": "Qwen3-8B",
+      "vendor": "Alibaba",
       "about": "Заметно умнее 4B, русский хороший. Умеет думать вслух — Писарь это выключает.",
       "file": "Qwen3-8B-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
-      "size_gb": 5.0,
-      "ram_gb": 10
+      "size_gb": 5.0, "ram_gb": 10, "speed": "средняя", "tier": "8–16 ГБ"
     },
     {
       "id": "qwen3-14b",
       "name": "Qwen3-14B",
-      "about": "Лучшее качество из Qwen, что влезает в 32 ГБ с запасом. На процессоре медленнее GigaChat раза в три.",
+      "vendor": "Alibaba",
+      "about": "Лучшее качество среди плотных Qwen для 32 ГБ. На процессоре медленнее GigaChat раза в три.",
       "file": "Qwen3-14B-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf",
-      "size_gb": 9.0,
-      "ram_gb": 16
+      "size_gb": 9.0, "ram_gb": 16, "speed": "медленная", "tier": "16–32 ГБ"
     },
     {
-      "id": "yandexgpt-5-lite",
-      "name": "YandexGPT 5 Lite 8B",
-      "about": "Русский родной, от Яндекса. Хорош для делового стиля и правки.",
-      "file": "YandexGPT-5-Lite-8B-instruct-Q4_K_M.gguf",
-      "url": "https://huggingface.co/yandex/YandexGPT-5-Lite-8B-instruct-GGUF/resolve/main/YandexGPT-5-Lite-8B-instruct-Q4_K_M.gguf",
-      "size_gb": 5.0,
-      "ram_gb": 10
+      "id": "qwen3-30b-a3b",
+      "name": "Qwen3-30B-A3B Instruct",
+      "vendor": "Alibaba",
+      "about": "Ум 30-миллиардной при скорости 3-миллиардной (MoE). Отличный выбор для 32 ГБ: быстро и умно.",
+      "file": "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+      "size_gb": 18.6, "ram_gb": 24, "speed": "быстрая", "tier": "32 ГБ"
+    },
+    {
+      "id": "gemma3-4b",
+      "name": "Gemma 3 4B",
+      "vendor": "Google",
+      "about": "Лёгкая многоязычная. Для слабых машин и ноутбуков.",
+      "file": "gemma-3-4b-it-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf",
+      "size_gb": 2.5, "ram_gb": 6, "speed": "быстрая", "tier": "8 ГБ"
     },
     {
       "id": "gemma3-12b",
       "name": "Gemma 3 12B",
-      "about": "От Google, многоязычная, русский приличный. Сильна в переводе.",
+      "vendor": "Google",
+      "about": "Многоязычная, русский приличный. Сильна в переводе.",
       "file": "gemma-3-12b-it-Q4_K_M.gguf",
       "url": "https://huggingface.co/unsloth/gemma-3-12b-it-GGUF/resolve/main/gemma-3-12b-it-Q4_K_M.gguf",
-      "size_gb": 7.3,
-      "ram_gb": 14
+      "size_gb": 7.3, "ram_gb": 14, "speed": "средняя", "tier": "16 ГБ"
+    },
+    {
+      "id": "gemma3-27b",
+      "name": "Gemma 3 27B",
+      "vendor": "Google",
+      "about": "Старшая Gemma: перевод и стиль на уровне облачных. Медленная на процессоре.",
+      "file": "gemma-3-27b-it-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/gemma-3-27b-it-GGUF/resolve/main/gemma-3-27b-it-Q4_K_M.gguf",
+      "size_gb": 16.5, "ram_gb": 22, "speed": "медленная", "tier": "32 ГБ"
+    },
+    {
+      "id": "mistral-small-3.2-24b",
+      "name": "Mistral Small 3.2 24B",
+      "vendor": "Mistral",
+      "about": "Европейская, хорошо редактирует и переводит, русский уверенный. Медленная на процессоре.",
+      "file": "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "url": "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/main/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+      "size_gb": 14.3, "ram_gb": 20, "speed": "медленная", "tier": "32 ГБ"
     }
   ]
 }

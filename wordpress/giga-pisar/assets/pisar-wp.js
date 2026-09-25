@@ -707,7 +707,7 @@ class Pisar {
         <input class="gp-key" type="password" placeholder="${L("ключ доступа (если программа его показала)", "access key (if the app printed one)")}" value="${esc(b.local.key)}" style="padding:6px 8px;font:inherit">
         <select class="gp-model" style="padding:6px 8px;font:inherit"></select>
         <p class="gp-note" style="margin:0;font-size:13px;color:#6b7280">${L(
-          "Программа с нейронкой на вашем компьютере: Ollama, LM Studio или brain-local из репозитория Гиги Писаря. Страница ходит к ней напрямую, текст на сайт не уходит.",
+          "Программа с нейронкой на вашем компьютере: GigaBrain (один файл, brain-local в репозитории Гиги Писаря), Ollama или LM Studio. Страница ходит к ней напрямую, текст на сайт не уходит.",
           "An app with a model on your computer: Ollama, LM Studio or brain-local from the Giga Pisar repo. The page talks to it directly; text never goes to the site.")}</p>
       </div>`;
     const fillModels = (dlg, models, chosen) => {

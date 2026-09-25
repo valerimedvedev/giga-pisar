@@ -100,7 +100,7 @@ Chromium, 4 ядра, запись 7,7 с:
 | GigaChat 3.1 (10B-A1.8B, 6,5 ГБ) | на сервере сайта: llama-server за nginx, адрес `/pisar/brain/`. Туда уходит только текст, звук остаётся на компьютере | сервер с ~12 ГБ памяти, `deploy.sh` |
 | Qwen3-4B Instruct (1,9 ГБ) | в браузере, через [wllama](https://github.com/ngxson/wllama) (llama.cpp на WebAssembly/WebGPU) | скачивается один раз кнопкой «Скачать»: с сайта (`brain-models/`), иначе с Hugging Face |
 
-| Любая — на компьютере человека | отдельная программа с OpenAI-совместимым API: Ollama, LM Studio или наш [brain-local](../brain-local/README.md). Страница ходит к ней по `http://127.0.0.1`, текст на сайт не уходит | 8–32 ГБ памяти по модели; быстрее всего |
+| Любая — на компьютере человека | отдельная программа с OpenAI-совместимым API: наш [GigaBrain](../brain-local/README.md) одним файлом, Ollama или LM Studio. Страница ходит к ней по `http://127.0.0.1`, текст на сайт не уходит | 8–32 ГБ памяти по модели; быстрее всего |
 
 GigaChat в браузер не влезает: WebAssembly даёт странице не больше 4 ГБ памяти.
 Промпты и команды кнопок — в `web/giga/brain.js` (`DEFAULT_PROMPTS`, `CHIPS`);

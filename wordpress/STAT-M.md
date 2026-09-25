@@ -40,6 +40,13 @@ cd giga-pisar && bash wordpress/build.sh
 4. Проверить: `curl -sI https://<сайт>/downloads/giga-pisar-latest.zip` должен отдать `200`
    и `application/zip`. Сообщить ссылку.
 
+## GigaBrain — рядом с плагином
+
+Собрать: `bash brain-local/build.sh` (нужен Go 1.22+) → `brain-local/dist/`.
+Выложить в ту же папку `downloads/`: `GigaBrain.exe`, `GigaBrain-macos-arm64`,
+`GigaBrain-macos-intel`, `GigaBrain-linux-x64`, `SHA256SUMS.txt`. В nginx
+добавить тип: `application/octet-stream exe;` (в `types { }` того же location).
+
 ## Если на M есть сайты на WordPress
 
 Можно сразу поставить плагин (только с согласия владельца сайта):
