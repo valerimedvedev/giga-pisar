@@ -295,13 +295,24 @@ class UI {
     const size = 30;
     const top = r.height < 60 ? r.top + (r.height - size) / 2 : r.bottom - size - 6;
     let left = r.right - size - 6;
-    if (outside && r.right + size + 10 < innerWidth) left = r.right + 8;
+    const brainOn = !this.fabBrain.hidden;
+    // у блока редактора обе кнопки снаружи справа, рядом: слева от микрофона
+    // сидит «+» вставки блока, и мозг его закрывал
+    const row = outside && r.right + (brainOn ? 2 * size + 16 : size + 10) < innerWidth;
+    if (row) left = r.right + 8;
     left = Math.min(left, innerWidth - size - 4);
     this.fab.style.top = `${Math.max(4, top)}px`;
     this.fab.style.left = `${Math.max(4, left)}px`;
-    // мозг — слева от микрофона
-    this.fabBrain.style.top = this.fab.style.top;
-    this.fabBrain.style.left = `${Math.max(4, left - size - 6)}px`;
+    if (row) {                       // мозг — справа от микрофона
+      this.fabBrain.style.top = this.fab.style.top;
+      this.fabBrain.style.left = `${left + size + 6}px`;
+    } else if (outside) {            // места справа нет — мозг под микрофоном
+      this.fabBrain.style.top = `${Math.max(4, top) + size + 6}px`;
+      this.fabBrain.style.left = this.fab.style.left;
+    } else {                         // внутри поля — слева от микрофона
+      this.fabBrain.style.top = this.fab.style.top;
+      this.fabBrain.style.left = `${Math.max(4, left - size - 6)}px`;
+    }
     this.placeBubble();
     this.placePanel();
   }
