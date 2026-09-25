@@ -23,3 +23,11 @@ web/model/
 web/*.tar.gz
 node_modules/
 web/brain-models/
+
+# Android: сборка и локальные пути SDK
+android/.gradle/
+android/**/build/
+android/local.properties
+android/.idea/
+android/.kotlin/
+android/app/.cxx/

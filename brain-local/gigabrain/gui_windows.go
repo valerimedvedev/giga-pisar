@@ -44,6 +44,7 @@ type gui struct {
 	ctxEdit  *walk.NumberEdit
 	autoCB   *walk.CheckBox
 	trayCB   *walk.CheckBox
+	lanCB    *walk.CheckBox
 	dirLabel *walk.Label
 	logEdit  *walk.TextEdit
 	bar      *walk.ProgressBar
@@ -197,6 +198,8 @@ func runApp(o *options, r *router) {
 						saveConfig()
 					}},
 
+					CheckBox{AssignTo: &g.lanCB, Text: "Доступ с телефона по домашней сети (приложение «Гига Писарь», по ключу)", ColumnSpan: 7, OnCheckedChanged: g.lanChanged},
+
 					Label{Text: "Папка данных:"},
 					Label{AssignTo: &g.dirLabel, Text: home, ColumnSpan: 3, EllipsisMode: EllipsisPath},
 					PushButton{Text: "Открыть", OnClicked: func() { openFolder(home) }},
@@ -278,7 +281,9 @@ func (g *gui) run(what string, f func() error) {
 	g.busyMu.Lock()
 	if g.busy {
 		g.busyMu.Unlock()
-		g.sync(func() { walk.MsgBox(g.mw, "GigaBrain", "Подождите: сейчас идёт другое скачивание.", walk.MsgBoxIconInformation) })
+		g.sync(func() {
+			walk.MsgBox(g.mw, "GigaBrain", "Подождите: сейчас идёт другое скачивание.", walk.MsgBoxIconInformation)
+		})
 		return
 	}
 	g.busy = true
@@ -338,6 +343,7 @@ func (g *gui) fill() {
 	g.ctxEdit.SetValue(float64(cfg.Ctx))
 	g.autoCB.SetChecked(autostartEnabled())
 	g.trayCB.SetChecked(cfg.Tray)
+	g.lanCB.SetChecked(cfg.LAN)
 	g.dirLabel.SetText(home)
 	g.refresh()
 }
@@ -735,6 +741,36 @@ func (g *gui) portChanged() {
 	saveConfig()
 	g.addrEdit.SetText(fmt.Sprintf("http://127.0.0.1:%d", cfg.Port))
 	g.appendLog(fmt.Sprintf("== Порт: %d (на странице укажите новый адрес)", cfg.Port))
+	g.refresh()
+}
+
+func (g *gui) lanChanged() {
+	want := g.lanCB.Checked()
+	if want == cfg.LAN {
+		return
+	}
+	cfg.LAN = want
+	if g.r.ln != nil {
+		if err := g.r.listen(); err != nil {
+			cfg.LAN = !want
+			g.lanCB.SetChecked(!want)
+			walk.MsgBox(g.mw, "Домашняя сеть", err.Error(), walk.MsgBoxIconWarning)
+			return
+		}
+	}
+	saveConfig()
+	if want {
+		ips := lanAddresses()
+		if len(ips) == 0 {
+			g.appendLog("== Доступ по сети включён, но адрес в домашней сети не найден")
+		}
+		for _, ip := range ips {
+			g.appendLog(fmt.Sprintf("== На телефоне укажите адрес http://%s:%d и ключ доступа (или «Найти в сети»)", ip, cfg.Port))
+		}
+		g.appendLog("   Если брандмауэр Windows спросит — разрешить для частных сетей.")
+	} else {
+		g.appendLog("== Доступ по сети выключен: мозг слушает только этот компьютер")
+	}
 	g.refresh()
 }
 

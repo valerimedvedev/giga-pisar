@@ -81,6 +81,7 @@ type Config struct {
 	Llama   string   `json:"llama"` // версия llama.cpp
 	Extra   []string `json:"extra"` // свои ключи llama-server
 	Tray    bool     `json:"tray"`  // Windows: закрытие окна прячет в область уведомлений
+	LAN     bool     `json:"lan"`   // слушать и домашнюю сеть (телефон, другой компьютер); ключ обязателен
 }
 
 var (
@@ -989,7 +990,11 @@ func (r *router) listen() error {
 		r.ln.Close()
 		r.ln = nil
 	}
-	addr := fmt.Sprintf("127.0.0.1:%d", cfg.Port)
+	host := "127.0.0.1"
+	if cfg.LAN {
+		host = "0.0.0.0"
+	}
+	addr := fmt.Sprintf("%s:%d", host, cfg.Port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("порт %d занят (уже запущен GigaBrain?): %v", cfg.Port, err)
@@ -1008,6 +1013,26 @@ func (r *router) shutdown() {
 		r.ln = nil
 	}
 	r.lnMu.Unlock()
+}
+
+// Адреса компьютера в домашней сети — чтобы показать, что вводить на телефоне.
+func lanAddresses() []string {
+	var out []string
+	ifaces, _ := net.Interfaces()
+	for _, i := range ifaces {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := i.Addrs()
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok {
+				if ip4 := ipn.IP.To4(); ip4 != nil && ip4.IsPrivate() {
+					out = append(out, ip4.String())
+				}
+			}
+		}
+	}
+	return out
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

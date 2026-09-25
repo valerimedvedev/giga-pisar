@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="gigaam" />
+        <exclude domain="file" path="llm" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="gigaam" />
+        <exclude domain="file" path="llm" />
+    </device-transfer>
+</data-extraction-rules>

@@ -23,9 +23,11 @@ func fatal(msg string) {
 
 func hideWindow(cmd *exec.Cmd) {}
 
-func autostartEnabled() bool          { return false }
-func setAutostart(on bool) error      { return errors.New("автозапуск есть только на Windows") }
-func makeShortcut()                   {}
+func autostartEnabled() bool { return false }
+func setAutostart(on bool) error {
+	return errors.New("автозапуск есть только на Windows")
+}
+func makeShortcut() {}
 
 // Консольный запуск (macOS, Linux): вопросы в терминале, меню по буквам.
 func runApp(o *options, r *router) {

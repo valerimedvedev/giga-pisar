@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- модели весят гигабайты — в облачную копию не идут -->
+    <exclude domain="file" path="gigaam" />
+    <exclude domain="file" path="llm" />
+    <exclude domain="cache" path="." />
+</full-backup-content>
