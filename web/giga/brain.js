@@ -90,20 +90,34 @@ export function stripAddress(text) {
 /** Что показать в статусе, пока нейронка думает. */
 export function actionLabel(command) {
   const c = command.toLowerCase();
+  if (c.startsWith("причеши")) return L("Причёсываю…", "Polishing…");
   if (c.includes("перевед") || c.includes("англ")) return L("Перевожу…", "Translating…");
   if (c.includes("сократ") || c.includes("короче")) return L("Сокращаю…", "Shortening…");
   if (c.includes("мысль")) return L("Собираю мысль…", "Composing…");
   if (c.includes("сглад") || c.includes("мягче")) return L("Сглаживаю…", "Smoothing…");
+  if (c.includes("делов") || c.includes("официальн")) return L("Делаю деловым…", "Making it formal…");
   if (c.includes("исправ") || c.includes("ошибк")) return L("Исправляю…", "Fixing…");
   return L("Причёсываю…", "Polishing…");
 }
 
-/** Кнопки над текстом — те же, что в менюшке приложения. */
+/** Функции мозга — кнопки над текстом. Команды вшиты сюда и в тот же
+ *  промпт, что и голосовые («Писарь, …»); администратор WordPress
+ *  выбирает, какие из них показывать (по id). */
 export const CHIPS = [
-  { title: L("Причесать", "Tidy up"),
+  { id: "tidy", title: L("Причесать", "Tidy up"),
     command: "причеши текст: убери слова-паразиты и повторы, поправь пунктуацию и очевидные ошибки; смысл, порядок мыслей и лексику не меняй" },
-  { title: L("Сократить", "Make it shorter"), command: "сократи, сохранив суть" },
-  { title: L("Перевести на английский", "Translate to English"), command: "переведи на английский" },
+  { id: "fix", title: L("Исправить ошибки", "Fix mistakes"),
+    command: "исправь только орфографию, пунктуацию и ошибки распознавания; слова, порядок и стиль не меняй" },
+  { id: "short", title: L("Сократить", "Make it shorter"),
+    command: "сократи, сохранив суть" },
+  { id: "compose", title: L("Собрать мысль", "Compose"),
+    command: "собери мысль: из сбивчивой речи сделай связный текст в том же порядке мыслей, ничего не добавляя от себя" },
+  { id: "smooth", title: L("Сгладить", "Soften"),
+    command: "сгладь тон: сделай мягче и вежливее, убери резкость; смысл не меняй" },
+  { id: "formal", title: L("Деловой стиль", "Formal"),
+    command: "перепиши в деловом стиле: нейтрально, чётко, без разговорных слов; смысл не меняй" },
+  { id: "english", title: L("Перевести на английский", "Translate to English"),
+    command: "переведи на английский" },
 ];
 
 const SELECTION_PROMPT =

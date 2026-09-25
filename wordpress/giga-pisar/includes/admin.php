@@ -114,6 +114,12 @@ function giga_pisar_settings_page() {
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_provider' ) ); ?>" value="qwen" <?php checked( $o['brain_provider'], 'qwen' ); ?>> <strong>Qwen3-4B</strong> — <?php esc_html_e( 'в браузере человека: при первом использовании он соглашается скачать 1,9 ГБ; нужен компьютер с 8 ГБ памяти', 'giga-pisar' ); ?></label><br>
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_provider' ) ); ?>" value="gigachat" <?php checked( $o['brain_provider'], 'gigachat' ); ?>> <strong>GigaChat</strong> — <?php esc_html_e( 'на сервере (llama-server): родной русский; на сервер уходит только текст', 'giga-pisar' ); ?></label>
 				</td></tr>
+				<tr><th scope="row"><?php esc_html_e( 'Функции на кнопках', 'giga-pisar' ); ?></th><td>
+					<?php foreach ( giga_pisar_chip_titles() as $id => $title ) : ?>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'chips' ) ); ?>[]" value="<?php echo esc_attr( $id ); ?>" <?php checked( in_array( $id, (array) $o['chips'], true ) ); ?>> <?php echo esc_html( $title ); ?></label><br>
+					<?php endforeach; ?>
+					<p class="description"><?php esc_html_e( 'Кнопки появляются после диктовки и работают над выделенным, а без выделения — над всем текстом поля. Голосом можно сказать любую команду: «…, Писарь, сделай список».', 'giga-pisar' ); ?></p>
+				</td></tr>
 				<tr><th scope="row"><label for="gp-gigachat"><?php esc_html_e( 'Адрес GigaChat', 'giga-pisar' ); ?></label></th><td>
 					<input id="gp-gigachat" class="regular-text code" type="url" name="<?php echo esc_attr( $name( 'gigachat_url' ) ); ?>" value="<?php echo esc_attr( $o['gigachat_url'] ); ?>" placeholder="http://127.0.0.1:8091/">
 					<?php if ( $o['gigachat_url'] ) : ?>

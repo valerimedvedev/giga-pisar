@@ -647,7 +647,8 @@ class Pisar {
     const t = this.target;
     const buttons = [];
     if (this.brain) {
-      for (const chip of CHIPS) {
+      const enabled = Array.isArray(cfg.chips) ? CHIPS.filter((c) => cfg.chips.includes(c.id)) : CHIPS;
+      for (const chip of enabled) {
         buttons.push({
           title: chip.title,
           onClick: async () => {

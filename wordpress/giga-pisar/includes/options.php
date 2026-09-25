@@ -23,6 +23,20 @@ function giga_pisar_defaults() {
 		'model_url'      => '',         // свой адрес архива GigaAM
 		'qwen_url'       => '',         // свой адрес Qwen .gguf
 		'isolation'      => 0,          // заголовки COOP/COEP — многопоточность
+		'chips'          => array( 'tidy', 'fix', 'short', 'compose', 'smooth', 'formal', 'english' ), // функции мозга на кнопках
+	);
+}
+
+/** Функции мозга (кнопки над текстом). Команды к ним — в assets/giga/brain.js. */
+function giga_pisar_chip_titles() {
+	return array(
+		'tidy'    => __( 'Причесать — убрать паразиты и повторы, поправить пунктуацию', 'giga-pisar' ),
+		'fix'     => __( 'Исправить ошибки — только орфография и пунктуация', 'giga-pisar' ),
+		'short'   => __( 'Сократить — сохранив суть', 'giga-pisar' ),
+		'compose' => __( 'Собрать мысль — связный текст из сбивчивой речи', 'giga-pisar' ),
+		'smooth'  => __( 'Сгладить — мягче и вежливее', 'giga-pisar' ),
+		'formal'  => __( 'Деловой стиль', 'giga-pisar' ),
+		'english' => __( 'Перевести на английский', 'giga-pisar' ),
 	);
 }
 
@@ -58,6 +72,10 @@ function giga_pisar_sanitize_options( $in ) {
 				$out[ $k ] = empty( $in[ $k ] ) ? 0 : 1;
 			}
 		}
+	}
+	if ( 'brain' === $tab || isset( $in['chips'] ) ) {
+		$chips        = isset( $in['chips'] ) && is_array( $in['chips'] ) ? array_map( 'sanitize_key', $in['chips'] ) : array();
+		$out['chips'] = array_values( array_intersect( array_keys( giga_pisar_chip_titles() ), $chips ) );
 	}
 	if ( isset( $in['who'] ) ) {
 		$out['who'] = in_array( $in['who'], array( 'all', 'logged_in' ), true ) ? $in['who'] : $d['who'];
