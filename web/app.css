@@ -140,6 +140,13 @@ button.link {
 .brain-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .brain-text .hint { font-size: 14px; }
 .brain-actions { display: flex; gap: 8px; }
+.local-form { display: flex; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
+.local-form input, .local-form select {
+  flex: 1 1 140px; padding: 6px 8px; font: inherit; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text);
+}
+.local-form button { padding: 6px 12px; font-size: 14px; }
+.brain-row { flex-wrap: wrap; }
 .brain-actions button { padding: 6px 12px; font-size: 14px; }
 
 #status[data-kind="recording"] { color: var(--rec); }

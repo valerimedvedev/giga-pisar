@@ -40,6 +40,7 @@ no companion server.
 - `install.sh` — puts the model files into `~/.giga/model`
 - `web/` — the same recognition in a browser page: dictate into a text field by a button, fully on-device (see [web/README.md](web/README.md))
 - `wordpress/` — WordPress plugin: voice input in any field and in the editors (`wordpress/build.sh` → zip)
+- `brain-local/` — the brain on the user's own computer: installers (Windows, macOS/Linux) and a model catalog
 
 The core is a Swift port of `giga_core.py` from
 [Giga Pisar for Linux](https://github.com/moznoazachem/giga-pisar-cli).
@@ -222,6 +223,7 @@ MIT
 - `install.sh` — кладёт файлы модели в `~/.giga/model`
 - `web/` — то же распознавание на веб-странице: диктовка в поле по кнопке, целиком на компьютере человека (см. [web/README.md](web/README.md))
 - `wordpress/` — плагин WordPress: голосовой ввод в любое поле и в редакторы (`wordpress/build.sh` собирает zip)
+- `brain-local/` — мозг на компьютере пользователя: установщики (Windows, macOS/Linux) и каталог моделей
 
 Ядро — перенос на Swift питоновского `giga_core.py` из
 [Гига Писаря для Linux](https://github.com/moznoazachem/giga-pisar-cli).

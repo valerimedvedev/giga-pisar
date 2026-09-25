@@ -114,12 +114,6 @@ function giga_pisar_settings_page() {
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_provider' ) ); ?>" value="qwen" <?php checked( $o['brain_provider'], 'qwen' ); ?>> <strong>Qwen3-4B</strong> — <?php esc_html_e( 'в браузере человека: при первом использовании он соглашается скачать 1,9 ГБ; нужен компьютер с 8 ГБ памяти', 'giga-pisar' ); ?></label><br>
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_provider' ) ); ?>" value="gigachat" <?php checked( $o['brain_provider'], 'gigachat' ); ?>> <strong>GigaChat</strong> — <?php esc_html_e( 'на сервере (llama-server): родной русский; на сервер уходит только текст', 'giga-pisar' ); ?></label>
 				</td></tr>
-				<tr><th scope="row"><?php esc_html_e( 'Функции на кнопках', 'giga-pisar' ); ?></th><td>
-					<?php foreach ( giga_pisar_chip_titles() as $id => $title ) : ?>
-						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'chips' ) ); ?>[]" value="<?php echo esc_attr( $id ); ?>" <?php checked( in_array( $id, (array) $o['chips'], true ) ); ?>> <?php echo esc_html( $title ); ?></label><br>
-					<?php endforeach; ?>
-					<p class="description"><?php esc_html_e( 'Кнопки появляются после диктовки и работают над выделенным, а без выделения — над всем текстом поля. Голосом можно сказать любую команду: «…, Писарь, сделай список».', 'giga-pisar' ); ?></p>
-				</td></tr>
 				<tr><th scope="row"><label for="gp-gigachat"><?php esc_html_e( 'Адрес GigaChat', 'giga-pisar' ); ?></label></th><td>
 					<input id="gp-gigachat" class="regular-text code" type="url" name="<?php echo esc_attr( $name( 'gigachat_url' ) ); ?>" value="<?php echo esc_attr( $o['gigachat_url'] ); ?>" placeholder="http://127.0.0.1:8091/">
 					<?php if ( $o['gigachat_url'] ) : ?>
@@ -132,6 +126,65 @@ function giga_pisar_settings_page() {
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_who' ) ); ?>" value="admins" <?php checked( $o['brain_who'], 'admins' ); ?>> <?php esc_html_e( 'Только администраторам', 'giga-pisar' ); ?></label><br>
 					<label><input type="radio" name="<?php echo esc_attr( $name( 'brain_who' ) ); ?>" value="dictation" <?php checked( $o['brain_who'], 'dictation' ); ?>> <?php esc_html_e( 'Всем, кто может диктовать', 'giga-pisar' ); ?></label>
 					<p class="description"><?php esc_html_e( 'Остальные пользуются прямой диктовкой: текст вставляется как распознан. Включить или выключить мозг может только администратор.', 'giga-pisar' ); ?></p>
+				</td></tr>
+				<tr><th scope="row"><?php esc_html_e( 'Мозг на компьютере пользователя', 'giga-pisar' ); ?></th><td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'brain_local' ) ); ?>" value="1" <?php checked( $o['brain_local'] ); ?>> <?php esc_html_e( 'Разрешить пользователю подключить свою нейронку', 'giga-pisar' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Человек ставит у себя программу с нейронкой (Ollama, LM Studio или наш brain-local из репозитория) и в подсказке Писаря (⚙) указывает её адрес. Страница ходит к ней по http://127.0.0.1 напрямую, текст на сайт не отправляется. Любая модель, которую он туда поставит; на компьютере с 32 ГБ памяти — GigaChat, Qwen3-14B, YandexGPT и т. п. — быстрее, чем на сервере.', 'giga-pisar' ); ?></p>
+				</td></tr>
+				<tr><th scope="row"><?php esc_html_e( 'Функции на кнопках', 'giga-pisar' ); ?></th><td>
+					<?php $chips = (array) $o['chips']; ?>
+					<table class="widefat" id="gp-chips" style="max-width:820px">
+						<thead><tr><th style="width:26%"><?php esc_html_e( 'Кнопка', 'giga-pisar' ); ?></th><th><?php esc_html_e( 'Команда нейронке', 'giga-pisar' ); ?></th><th style="width:40px"></th></tr></thead>
+						<tbody>
+						<?php for ( $i = 0; $i < GIGA_PISAR_MAX_CHIPS; $i++ ) : ?>
+							<?php $c = $chips[ $i ] ?? array( 'title' => '', 'command' => '' ); ?>
+							<tr <?php echo $i >= count( $chips ) && $i > 0 ? 'class="gp-empty"' : ''; ?>>
+								<td><input type="text" class="widefat" maxlength="40" name="<?php echo esc_attr( $name( 'chips' ) ); ?>[<?php echo (int) $i; ?>][title]" value="<?php echo esc_attr( $c['title'] ); ?>" placeholder="<?php esc_attr_e( 'Название', 'giga-pisar' ); ?>"></td>
+								<td><textarea class="widefat" rows="2" maxlength="300" name="<?php echo esc_attr( $name( 'chips' ) ); ?>[<?php echo (int) $i; ?>][command]" placeholder="<?php esc_attr_e( 'что сделать с текстом, как сказали бы вслух', 'giga-pisar' ); ?>"><?php echo esc_textarea( $c['command'] ); ?></textarea></td>
+								<td><button type="button" class="button-link gp-clear" title="<?php esc_attr_e( 'Очистить', 'giga-pisar' ); ?>">✕</button></td>
+							</tr>
+						<?php endfor; ?>
+						</tbody>
+					</table>
+					<p>
+						<button type="button" class="button" id="gp-chips-add"><?php esc_html_e( 'Добавить кнопку', 'giga-pisar' ); ?></button>
+						<button type="submit" class="button" name="<?php echo esc_attr( $name( 'chips_reset' ) ); ?>" value="1" onclick="return confirm('<?php echo esc_js( __( 'Вернуть 7 кнопок по умолчанию? Свои правки пропадут.', 'giga-pisar' ) ); ?>')"><?php esc_html_e( 'Вернуть по умолчанию', 'giga-pisar' ); ?></button>
+					</p>
+					<p class="description"><?php printf( esc_html__( 'До %d кнопок. Строки без названия или команды не сохраняются. Команда идёт нейронке в конце промпта как «Команда пользователя к тексту: …». Кнопки появляются после диктовки и работают над выделенным, а без выделения — над всем текстом поля. Голосом можно сказать любую команду: «…, Писарь, сделай список».', 'giga-pisar' ), (int) GIGA_PISAR_MAX_CHIPS ); ?></p>
+					<script>
+					( function () {
+						const rows = [ ...document.querySelectorAll( '#gp-chips tbody tr' ) ];
+						const refresh = () => {
+							let shown = 0;
+							rows.forEach( ( r ) => {
+								const filled = [ ...r.querySelectorAll( 'input, textarea' ) ].some( ( f ) => f.value.trim() );
+								if ( filled || shown === 0 ) { r.style.display = ''; shown++; } else if ( ! r.dataset.open ) { r.style.display = 'none'; } else { shown++; }
+							} );
+							document.getElementById( 'gp-chips-add' ).disabled = shown >= rows.length;
+						};
+						document.getElementById( 'gp-chips-add' ).addEventListener( 'click', () => {
+							const r = rows.find( ( x ) => x.style.display === 'none' );
+							if ( r ) { r.dataset.open = '1'; r.style.display = ''; r.querySelector( 'input' ).focus(); refresh(); }
+						} );
+						rows.forEach( ( r ) => r.querySelector( '.gp-clear' ).addEventListener( 'click', () => {
+							r.querySelectorAll( 'input, textarea' ).forEach( ( f ) => { f.value = ''; } );
+							delete r.dataset.open;
+							refresh();
+						} ) );
+						refresh();
+					}() );
+					</script>
+				</td></tr>
+				<?php $defs = giga_pisar_default_prompts(); ?>
+				<tr><th scope="row"><label for="gp-prompt-d"><?php esc_html_e( 'Промпт для диктовки', 'giga-pisar' ); ?></label></th><td>
+					<textarea id="gp-prompt-d" class="large-text" rows="6" name="<?php echo esc_attr( $name( 'prompt_dictation' ) ); ?>"><?php echo esc_textarea( giga_pisar_prompt( 'dictation' ) ); ?></textarea>
+					<p class="description"><?php esc_html_e( 'Системная инструкция для «…, Писарь, команда» в конце диктовки. К ней в конце дописывается «Команда пользователя к тексту: …». Пустое поле или образец без изменений = вшитый промпт.', 'giga-pisar' ); ?>
+						<button type="button" class="button-link" onclick="document.getElementById('gp-prompt-d').value=<?php echo esc_attr( wp_json_encode( $defs['dictation'] ) ); ?>"><?php esc_html_e( 'Вернуть образец', 'giga-pisar' ); ?></button></p>
+				</td></tr>
+				<tr><th scope="row"><label for="gp-prompt-s"><?php esc_html_e( 'Промпт для выделенного и кнопок', 'giga-pisar' ); ?></label></th><td>
+					<textarea id="gp-prompt-s" class="large-text" rows="6" name="<?php echo esc_attr( $name( 'prompt_selection' ) ); ?>"><?php echo esc_textarea( giga_pisar_prompt( 'selection' ) ); ?></textarea>
+					<p class="description"><?php esc_html_e( 'Для команды над выделенным текстом и для кнопок. Здесь удобно задать стиль издания: «пиши по нормам такого-то издания», «обращение на вы» и т. п.', 'giga-pisar' ); ?>
+						<button type="button" class="button-link" onclick="document.getElementById('gp-prompt-s').value=<?php echo esc_attr( wp_json_encode( $defs['selection'] ) ); ?>"><?php esc_html_e( 'Вернуть образец', 'giga-pisar' ); ?></button></p>
 				</td></tr>
 			<?php endif; ?>
 			</table>

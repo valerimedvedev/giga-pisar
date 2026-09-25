@@ -2,15 +2,17 @@
 // надиктованное по команде «Писарь, исправь» (и любой другой) и выполняет
 // команды над выделенным текстом.
 //
-// Две модели, как в приложении:
-//   GigaChat — родной русский, 6,5 ГБ. В браузер не влезает (WebAssembly
-//     даёт странице не больше 4 ГБ памяти), поэтому крутится на сервере
-//     сайта (llama-server за nginx, адрес brain/). Туда уходит только текст,
-//     звук остаётся на компьютере.
-//   Qwen3-4B — 1,9 ГБ, скачивается в браузер один раз и считает на месте
+// Три места, где может жить нейронка:
+//   GigaChat на сервере сайта — llama-server за nginx (адрес brain/). Туда
+//     уходит только текст, звук остаётся на компьютере.
+//   Qwen3-4B в браузере — 1,9 ГБ, скачивается один раз и считает на месте
 //     через wllama (llama.cpp на WebAssembly/WebGPU).
+//   На компьютере человека — отдельная программа с OpenAI-совместимым
+//     API (Ollama, LM Studio, llama-server, наш brain-local/). Страница
+//     ходит к ней по http://127.0.0.1:порт; модель — любая, что там стоит.
+//     Быстрее браузера и не грузит сервер сайта.
 //
-// Выбор модели запоминается в localStorage.
+// Выбор модели и адрес местного мозга запоминаются в localStorage.
 
 const ru = (navigator.language || "ru").toLowerCase().startsWith("ru");
 const L = (r, e) => (ru ? r : e);
@@ -33,7 +35,19 @@ const WLLAMA_SOURCES = [
 /** Адрес llama-server с GigaChat на сервере сайта (относительно страницы). */
 const SERVER_BASE = new URL("../brain/", import.meta.url).href;
 
+/** Где искать мозг на компьютере человека: наш brain-local, Ollama, LM Studio, llama-server. */
+export const LOCAL_CANDIDATES = [
+  "http://127.0.0.1:8091", "http://127.0.0.1:11434", "http://127.0.0.1:1234", "http://127.0.0.1:8080",
+];
+
 export const BRAIN_MODELS = [
+  {
+    id: "local",
+    name: L("На моём компьютере", "On my computer"),
+    where: "local",
+    details: L("отдельная программа (Ollama, LM Studio, наш brain-local) · любая модель · быстрее всего",
+               "a separate app (Ollama, LM Studio, our brain-local) · any model · fastest"),
+  },
   {
     id: "gigachat",
     name: "GigaChat",
@@ -120,7 +134,8 @@ export const CHIPS = [
     command: "переведи на английский" },
 ];
 
-const SELECTION_PROMPT =
+export const DEFAULT_PROMPTS = {};
+const SELECTION_PROMPT = DEFAULT_PROMPTS.selection =
   "Ты редактируешь текст, который пользователь выделил в своём документе, " +
   "и выполняешь над ним команду пользователя. Сохраняй смысл и разбиение " +
   "на абзацы, ничего не добавляй от себя и не комментируй. Тон и стиль " +
@@ -129,7 +144,7 @@ const SELECTION_PROMPT =
   "упоминать её в ответе нельзя. Верни ТОЛЬКО готовый текст, без кавычек " +
   "вокруг него.";
 
-const DICTATION_PROMPT =
+const DICTATION_PROMPT = DEFAULT_PROMPTS.dictation =
   "Ты обрабатываешь надиктованный голосом текст перед вставкой. Правила: " +
   "убери слова-паразиты и оговорки (э, ну, типа, вот, как бы), убери повторы " +
   "и самоисправления, расставь знаки препинания, исправь очевидные ошибки " +
@@ -145,14 +160,53 @@ export function stripThinking(s) {
   return i >= 0 ? s.slice(i + "</think>".length) : s;
 }
 
-function messagesFor(body, command, mode) {
+export function messagesFor(body, command, mode, prompts = DEFAULT_PROMPTS) {
   // Команда — в системную инструкцию, текст — отдельным сообщением целиком:
   // иначе нейронка норовит обработать команду как часть текста.
+  const base = (mode === "selection" ? prompts.selection : prompts.dictation) || DEFAULT_PROMPTS[mode === "selection" ? "selection" : "dictation"];
   return [
-    { role: "system", content: (mode === "selection" ? SELECTION_PROMPT : DICTATION_PROMPT) +
-      `\n\nКоманда пользователя к тексту: ${command}.` },
+    { role: "system", content: base + `\n\nКоманда пользователя к тексту: ${command}.` },
     { role: "user", content: body },
   ];
+}
+
+/** Настройки местного мозга человека: адрес, ключ, модель. */
+export function localSettings() {
+  try { return JSON.parse(localStorage.getItem("giga.local") || "{}") || {}; } catch { return {}; }
+}
+export function saveLocalSettings(v) {
+  try { localStorage.setItem("giga.local", JSON.stringify(v)); } catch { /* приватное окно */ }
+}
+
+const normBase = (u) => String(u || "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
+const authHeaders = (key) => (key ? { Authorization: `Bearer ${key}` } : {});
+
+/** Спрашивает у OpenAI-совместимого сервера список моделей. Бросает, если не отвечает. */
+export async function listLocalModels(base, key = "", timeoutMs = 3000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(normBase(base) + "/v1/models", { headers: authHeaders(key), signal: ctl.signal, cache: "no-store" });
+    if (r.status === 401 || r.status === 403) throw new Error(L("нужен ключ доступа", "an access key is required"));
+    if (!r.ok) throw new Error(L(`ответил ${r.status}`, `answered ${r.status}`));
+    const j = await r.json();
+    return (j.data || j.models || []).map((m) => m.id || m.name || m.model).filter(Boolean);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Ищет мозг на компьютере: первый адрес из списка, который отдаёт модели. */
+export async function probeLocal(candidates = LOCAL_CANDIDATES, key = "") {
+  for (const base of candidates) {
+    try {
+      const models = await listLocalModels(base, key, 1500);
+      return { base, models };
+    } catch (e) {
+      if (/ключ|key/.test(e.message)) return { base, models: [], needsKey: true };
+    }
+  }
+  return null;
 }
 
 const store = {
@@ -173,9 +227,13 @@ export class Brain extends EventTarget {
    * @param qwenUrls     откуда качать Qwen, по порядку
    */
   constructor({ chosenId = null, serverBase = SERVER_BASE, serverChat = null, serverHealth = null,
-                qwenUrls = null } = {}) {
+                qwenUrls = null, prompts = null, local = null } = {}) {
     super();
     this.chosenId = chosenId ?? (store.get("giga.brain") || "off");
+    this.prompts = { ...DEFAULT_PROMPTS, ...(prompts || {}) };
+    this.local = { ...localSettings(), ...(local || {}) };   // { base, key, model }
+    this.localState = "unknown";   // unknown | ok | absent | nokey
+    this.localModels = [];
     this.serverBase = serverBase;
     this.serverChatFn = serverChat;
     this.serverHealthFn = serverHealth;
@@ -195,7 +253,40 @@ export class Brain extends EventTarget {
   get ready() {
     if (this.chosenId === "gigachat") return this.server === "ok";
     if (this.chosenId === "qwen") return this.qwen === "ready" || this.qwen === "loaded";
+    if (this.chosenId === "local") return this.localState === "ok";
     return false;
+  }
+
+  /** Меняет адрес/ключ/модель местного мозга и запоминает их. */
+  setLocal(v) {
+    this.local = { ...this.local, ...v };
+    saveLocalSettings(this.local);
+    this.changed();
+  }
+
+  /** Есть ли мозг на компьютере: по сохранённому адресу, а без него — по обычным портам. */
+  async checkLocal() {
+    const key = this.local.key || "";
+    try {
+      if (this.local.base) {
+        this.localModels = await listLocalModels(this.local.base, key);
+      } else {
+        const found = await probeLocal(LOCAL_CANDIDATES, key);
+        if (!found) throw new Error("absent");
+        if (found.needsKey) { this.localState = "nokey"; this.local.base = found.base; this.changed(); return; }
+        this.local.base = found.base;
+        this.localModels = found.models;
+        saveLocalSettings(this.local);
+      }
+      // модель: выбранная, если она есть на сервере, иначе первая из списка
+      if (!this.localModels.includes(this.local.model)) {
+        this.local.model = this.localModels[0] || this.local.model || "";
+      }
+      this.localState = "ok";
+    } catch (e) {
+      this.localState = /ключ|key/.test(e.message || "") ? "nokey" : "absent";
+    }
+    this.changed();
   }
 
   choose(id) {
@@ -209,7 +300,7 @@ export class Brain extends EventTarget {
 
   /** Что с моделями: сервер отвечает? Qwen уже в браузере? */
   async refresh() {
-    await Promise.all([this.checkServer(), this.checkQwen()]);
+    await Promise.all([this.checkServer(), this.checkQwen(), this.checkLocal()]);
     this.changed();
     if (this.chosenId === "qwen" && this.qwen === "ready") this.warmUp();
   }
@@ -350,9 +441,18 @@ export class Brain extends EventTarget {
   /** Прогоняет текст через выбранную модель. Бросает, если не вышло.
    *  onStage(текст) — что показать человеку, пока ждём. */
   async transform(body, command, mode = "dictation", onStage = () => {}) {
-    const messages = messagesFor(body, command, mode);
+    const messages = messagesFor(body, command, mode, this.prompts);
     let out;
-    if (this.chosenId === "gigachat") {
+    if (this.chosenId === "local") {
+      if (this.localState !== "ok") await this.checkLocal();
+      if (this.localState !== "ok") {
+        throw new Error(this.localState === "nokey"
+          ? L("мозгу на компьютере нужен ключ доступа", "the local brain needs an access key")
+          : L("мозг на компьютере не отвечает — запущена ли программа?", "the local brain does not answer — is the app running?"));
+      }
+      onStage(actionLabel(command));
+      out = await this.chatOpenAI(normBase(this.local.base), messages, { key: this.local.key, model: this.local.model });
+    } else if (this.chosenId === "gigachat") {
       onStage(actionLabel(command));
       out = this.serverChatFn ? await this.serverChatFn(body, command, mode) : await this.chatServer(messages);
     } else if (this.chosenId === "qwen") {
@@ -375,15 +475,21 @@ export class Brain extends EventTarget {
     return text;
   }
 
-  async chatServer(messages) {
+  chatServer(messages) {
+    return this.chatOpenAI(this.serverBase.replace(/\/+$/, ""), messages);
+  }
+
+  /** Запрос к любому OpenAI-совместимому серверу (llama-server, Ollama, LM Studio). */
+  async chatOpenAI(base, messages, { key = "", model = "" } = {}) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
-      const r = await fetch(this.serverBase + "v1/chat/completions", {
+      const r = await fetch(base + "/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders(key) },
         body: JSON.stringify({
-          messages, temperature: 0.3, max_tokens: 2048,
+          ...(model ? { model } : {}),
+          messages, temperature: 0.3, max_tokens: 2048, stream: false,
           chat_template_kwargs: { enable_thinking: false },
         }),
         signal: ctl.signal,

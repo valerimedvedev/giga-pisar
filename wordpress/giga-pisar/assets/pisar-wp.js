@@ -13,7 +13,7 @@
 import { Engine } from "./giga/engine.js";
 import { Mic } from "./giga/mic.js";
 import * as store from "./giga/model-store.js";
-import { Brain, CHIPS, parseCommand, stripAddress } from "./giga/brain.js";
+import { Brain, CHIPS, parseCommand, stripAddress, listLocalModels, probeLocal, LOCAL_CANDIDATES } from "./giga/brain.js";
 
 const cfg = window.GigaPisarConfig || {};
 // По-русски, если русский у сайта или у браузера человека
@@ -307,7 +307,8 @@ class UI {
         el.type = "button";
         el.textContent = b.title;
         if (b.primary) el.className = "primary";
-        el.addEventListener("click", () => close(b.id));
+        // keep: кнопка что-то делает внутри окна и не закрывает его
+        el.addEventListener("click", () => (b.keep ? b.onClick(this.dialog) : close(b.id)));
         actions.append(el);
       }
       document.addEventListener("keydown", onKey, true);
@@ -375,7 +376,10 @@ class Pisar {
   }
 
   makeBrain(provider) {
-    const opts = { chosenId: provider, qwenUrls: cfg.qwenUrls };
+    // Человек может переключить мозг на свой компьютер — это его выбор, живёт в localStorage.
+    const local = cfg.brainLocal && localStorage.getItem("giga.brain.where") === "local";
+    const opts = { chosenId: local ? "local" : provider, qwenUrls: cfg.qwenUrls, prompts: cfg.prompts || null };
+    this.siteProvider = provider;
     if (provider === "gigachat") {
       const headers = { "Content-Type": "application/json", "X-WP-Nonce": cfg.nonce };
       opts.serverHealth = async () => {
@@ -581,6 +585,15 @@ class Pisar {
   async brainReady() {
     const b = this.brain;
     if (!b) return false;
+    if (b.chosenId === "local") {
+      if (b.localState !== "ok") await b.checkLocal();
+      if (b.localState === "ok") return true;
+      this.say(b.localState === "nokey"
+        ? L("Нейронке на вашем компьютере нужен ключ — откройте ⚙ Мозг", "Your local brain needs a key — open ⚙ Brain")
+        : L("Нейронка на вашем компьютере не отвечает — запущена ли программа? (⚙ Мозг)", "Your local brain does not answer — is the app running? (⚙ Brain)"),
+        "warn", { hideAfter: 8000 });
+      return false;
+    }
     if (b.chosenId === "gigachat") {
       if (b.server !== "ok") await b.checkServer();
       if (b.server !== "ok") {
@@ -647,7 +660,8 @@ class Pisar {
     const t = this.target;
     const buttons = [];
     if (this.brain) {
-      const enabled = Array.isArray(cfg.chips) ? CHIPS.filter((c) => cfg.chips.includes(c.id)) : CHIPS;
+      // кнопки из настроек сайта (название + команда); без них — вшитые
+      const enabled = Array.isArray(cfg.chips) && cfg.chips.length && typeof cfg.chips[0] === "object" ? cfg.chips : CHIPS;
       for (const chip of enabled) {
         buttons.push({
           title: chip.title,
@@ -665,6 +679,9 @@ class Pisar {
         });
       }
     }
+    if (this.brain && cfg.brainLocal) {
+      buttons.push({ title: "⚙ " + L("Мозг", "Brain"), onClick: () => this.brainSettings() });
+    }
     if (canUndo && t.undo) {
       buttons.push({
         title: L("Вернуть как было", "Put it back"),
@@ -672,6 +689,89 @@ class Pisar {
       });
     }
     this.say(text, "ok", { buttons, hideAfter: buttons.length ? 12000 : 3000 });
+  }
+
+  // ── мозг на компьютере человека
+
+  /** Окно «⚙ Мозг»: на сайте или на моём компьютере; адрес, ключ, модель. */
+  async brainSettings() {
+    const b = this.brain;
+    const site = this.siteProvider === "gigachat" ? "GigaChat" : "Qwen3-4B";
+    const siteWhere = this.siteProvider === "gigachat" ? L("на сервере сайта", "on the site's server") : L("в браузере", "in the browser");
+    const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const html = `
+      <label style="display:block;margin:4px 0"><input type="radio" name="gp-where" value="site" ${b.chosenId !== "local" ? "checked" : ""}> ${site} — ${siteWhere}</label>
+      <label style="display:block;margin:4px 0 10px"><input type="radio" name="gp-where" value="local" ${b.chosenId === "local" ? "checked" : ""}> ${L("Нейронка на моём компьютере", "A model on my computer")}</label>
+      <div class="gp-local" style="display:grid;gap:6px">
+        <input class="gp-base" type="text" placeholder="http://127.0.0.1:8091" value="${esc(b.local.base)}" spellcheck="false" style="padding:6px 8px;font:inherit">
+        <input class="gp-key" type="password" placeholder="${L("ключ доступа (если программа его показала)", "access key (if the app printed one)")}" value="${esc(b.local.key)}" style="padding:6px 8px;font:inherit">
+        <select class="gp-model" style="padding:6px 8px;font:inherit"></select>
+        <p class="gp-note" style="margin:0;font-size:13px;color:#6b7280">${L(
+          "Программа с нейронкой на вашем компьютере: Ollama, LM Studio или brain-local из репозитория Гиги Писаря. Страница ходит к ней напрямую, текст на сайт не уходит.",
+          "An app with a model on your computer: Ollama, LM Studio or brain-local from the Giga Pisar repo. The page talks to it directly; text never goes to the site.")}</p>
+      </div>`;
+    const fillModels = (dlg, models, chosen) => {
+      const sel = dlg.querySelector(".gp-model");
+      sel.innerHTML = "";
+      for (const id of models) {
+        const o = document.createElement("option");
+        o.value = o.textContent = id;
+        o.selected = id === chosen;
+        sel.append(o);
+      }
+      sel.hidden = !models.length;
+    };
+    const check = async (dlg) => {
+      const status = dlg.querySelector(".status");
+      const base = dlg.querySelector(".gp-base").value.trim();
+      const key = dlg.querySelector(".gp-key").value.trim();
+      status.dataset.kind = "";
+      status.textContent = L("Проверяю…", "Checking…");
+      try {
+        let found;
+        if (base) found = { base, models: await listLocalModels(base, key) };
+        else found = await probeLocal(LOCAL_CANDIDATES, key);
+        if (!found) throw new Error(L("не найдена ни на одном обычном порту — запущена ли программа?", "not found on any usual port — is the app running?"));
+        if (found.needsKey) throw new Error(L("программа просит ключ доступа", "the app asks for an access key"));
+        dlg.querySelector(".gp-base").value = found.base;
+        fillModels(dlg, found.models, b.local.model);
+        status.textContent = L(`Отвечает: ${found.base}, моделей: ${found.models.length}`, `Answers: ${found.base}, models: ${found.models.length}`);
+        dlg.querySelector("input[name=gp-where][value=local]").checked = true;
+      } catch (e) {
+        status.dataset.kind = "error";
+        status.textContent = L(`Не отвечает: ${e.message}`, `No answer: ${e.message}`);
+      }
+    };
+    // окно строится сразу, ответ ждём потом — список моделей заполняем, пока оно открыто
+    const pending = this.ui.ask({
+      title: L("Мозг Писаря", "Pisar's brain"),
+      html,
+      buttons: [
+        { title: L("Найти / проверить", "Find / check"), keep: true, onClick: check },
+        { id: "cancel", title: L("Отмена", "Cancel") },
+        { id: "save", title: L("Сохранить", "Save"), primary: true },
+      ],
+    });
+    const dlg = this.ui.dialog;
+    fillModels(dlg, b.localModels, b.local.model);
+    if (b.localState === "unknown" && (b.local.base || b.chosenId === "local")) {
+      b.checkLocal().then(() => { if (!this.ui.veil.hidden) fillModels(dlg, b.localModels, b.local.model); });
+    }
+    const res = await pending;
+    if (res !== "save") { this.refocus(); return; }
+    const where = dlg.querySelector("input[name=gp-where]:checked")?.value || "site";
+    b.setLocal({
+      base: dlg.querySelector(".gp-base").value.trim(),
+      key: dlg.querySelector(".gp-key").value.trim(),
+      model: dlg.querySelector(".gp-model").value || b.local.model || "",
+    });
+    b.chosenId = where === "local" ? "local" : this.siteProvider;
+    b.localState = "unknown";
+    try { localStorage.setItem("giga.brain.where", where); } catch { /* приватное окно */ }
+    this.refocus();
+    this.say(where === "local"
+      ? L("Мозг: нейронка на вашем компьютере", "Brain: the model on your computer")
+      : L(`Мозг: ${site} ${siteWhere}`, `Brain: ${site} ${siteWhere}`), "ok", { hideAfter: 4000 });
   }
 
   // ── пакет распознавания
@@ -785,7 +885,7 @@ async function diagnose() {
     add(L("Микрофон", "Microphone"), true, L("браузер спросит при первой записи", "the browser will ask"));
   }
   add(L("Многопоточность", "Multithreading"), true, crossOriginIsolated ? L("включена", "on") : L("выключена — работает в один поток", "off — single thread"));
-  add(L("Мозг для вас", "Brain for you"), true, cfg.brain || L("выключен", "off"));
+  add(L("Мозг для вас", "Brain for you"), true, cfg.brain ? cfg.brain + (cfg.brainLocal ? L(" · можно свой на компьютере", " · or your own local one") : "") : L("выключен", "off"));
   return rows;
 }
 
