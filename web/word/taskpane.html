@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Гига Писарь</title>
+  <link rel="stylesheet" href="taskpane.css">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script type="module" src="taskpane.js"></script>
+</head>
+<body>
+  <main>
+    <div class="buttons">
+      <button id="dictate" type="button" class="big mic" disabled>🎙 Запись</button>
+      <button id="brain-btn" type="button" class="big brain">🧠 Мозг</button>
+    </div>
+    <p id="status" class="status">Загружаюсь…</p>
+
+    <section id="panel" class="card" hidden>
+      <div class="head">
+        <span id="brain-where" class="where"></span>
+        <button id="settings-btn" type="button" class="icon" title="Настройки мозга">⚙</button>
+      </div>
+      <p id="scope" class="hint"></p>
+      <div id="chips" class="chips"></div>
+      <div class="own">
+        <textarea id="prompt" rows="2" placeholder="Свой промпт: что сделать с текстом (Ctrl+Enter — выполнить)"></textarea>
+        <button id="run-prompt" type="button">Выполнить</button>
+      </div>
+      <div id="history-box" hidden>
+        <p class="hint" id="history-title"></p>
+        <ul id="history"></ul>
+      </div>
+      <div class="foot">
+        <button id="revert" type="button" disabled>Вернуть как было</button>
+        <span class="hint">или Ctrl+Z в Word</span>
+      </div>
+    </section>
+
+    <section id="model" class="card" hidden>
+      <h2>Пакет распознавания</h2>
+      <p class="hint">GigaAM v3, 213 МБ, один раз. Остаётся в Word, звук никуда не уходит.</p>
+      <div class="actions">
+        <button id="model-server" type="button" hidden>Скачать с сайта</button>
+        <label class="button" for="model-file">Выбрать архив…</label>
+        <input id="model-file" type="file" accept=".gz,.tgz,.onnx,.model,.yaml" multiple hidden>
+      </div>
+    </section>
+
+    <section id="settings" class="card" hidden>
+      <div class="head"><h2>Мозг</h2><button id="settings-close" type="button" class="icon">✕</button></div>
+      <div id="brain-models"></div>
+      <p id="brain-status" class="hint"></p>
+
+      <details>
+        <summary>Команды на кнопках (до 10)</summary>
+        <div id="chips-editor"></div>
+        <div class="actions">
+          <button id="chip-add" type="button">Добавить</button>
+          <button id="chips-save" type="button">Сохранить</button>
+          <button id="chips-reset" type="button">По умолчанию</button>
+        </div>
+      </details>
+      <details>
+        <summary>Промпты нейронке</summary>
+        <label>Для надиктованного<textarea id="prompt-dictation" rows="4"></textarea></label>
+        <label>Для выделенного<textarea id="prompt-selection" rows="4"></textarea></label>
+        <div class="actions">
+          <button id="prompts-save" type="button">Сохранить</button>
+          <button id="prompts-reset" type="button">Вернуть образец</button>
+        </div>
+      </details>
+      <details>
+        <summary>Пакет распознавания</summary>
+        <p id="storage" class="hint"></p>
+        <button id="model-delete" type="button" hidden>Удалить из Word</button>
+      </details>
+    </section>
+    <p class="hint tiny">Скажите в конце диктовки «…, Писарь, сократи». Выделите текст и нажмите «Запись» — команда голосом выполнится над выделенным.</p>
+  </main>
+</body>
+</html>

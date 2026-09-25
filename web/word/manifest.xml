@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Гига Писарь — надстройка Word (боковая панель). Страница живёт на сайте:
+     https://vmindlab.ru/pisar/word/ . Чтобы взять другой сайт, замените адрес
+     во всех Url ниже (DefaultValue="https://…"). -->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>7c1f3c2e-9b1a-4e0a-9d5e-6a2f1e8b4c3d</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Гига Писарь</ProviderName>
+  <DefaultLocale>ru-RU</DefaultLocale>
+  <DisplayName DefaultValue="Гига Писарь"/>
+  <Description DefaultValue="Диктовка голосом в документ и правка нейронкой: GigaAM v3 распознаёт речь прямо в Word, звук никуда не уходит."/>
+  <IconUrl DefaultValue="https://vmindlab.ru/pisar/word/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://vmindlab.ru/pisar/word/icons/icon-64.png"/>
+  <SupportUrl DefaultValue="https://github.com/valerimedvedev/giga-pisar"/>
+  <AppDomains>
+    <AppDomain>https://vmindlab.ru</AppDomain>
+    <AppDomain>https://cdn.jsdelivr.net</AppDomain>
+    <AppDomain>https://huggingface.co</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://vmindlab.ru/pisar/word/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="GigaPisar.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="GigaPisar.Open">
+                  <Label resid="Button.Label"/>
+                  <Supertip>
+                    <Title resid="Button.Label"/>
+                    <Description resid="Button.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>GigaPisar.Pane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://vmindlab.ru/pisar/word/icons/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://vmindlab.ru/pisar/word/icons/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://vmindlab.ru/pisar/word/icons/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://vmindlab.ru/pisar/word/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/valerimedvedev/giga-pisar"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Group.Label" DefaultValue="Гига Писарь"/>
+        <bt:String id="Button.Label" DefaultValue="Гига Писарь"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Гига Писарь готов"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="Button.Tip" DefaultValue="Открыть панель: 🎙 Запись — диктовка в документ, 🧠 Мозг — правка нейронкой."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Нажмите «Гига Писарь» на вкладке «Главная»: панель откроется справа."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
