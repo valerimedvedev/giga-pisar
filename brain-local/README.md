@@ -37,7 +37,12 @@ GigaBrain.exe --add https://…/x.gguf  любой .gguf по адресу
 GigaBrain.exe --model gigachat-20b-a3b  основная модель
 GigaBrain.exe --backend vulkan        cpu | vulkan | cuda (спрашивается при первом запуске)
 GigaBrain.exe --port 8091 --dir D:\GigaBrain --catalog my.json --no-menu
+GigaBrain.exe --llama-url https://…/llama-….zip   свой архив llama.cpp, если подбор не справился
 ```
+
+Сборку llama.cpp GigaBrain выбирает по ключевым словам в именах файлов выпуска
+(схема имён у llama.cpp меняется), перебирая несколько последних выпусков. Если
+ничего не подошло, покажет список файлов выпуска и спросит номер.
 
 Сборка из исходников: `bash brain-local/build.sh` (нужен Go 1.22+, библиотек нет).
 

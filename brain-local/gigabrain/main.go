@@ -39,7 +39,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -47,7 +46,7 @@ import (
 	"time"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 //go:embed catalog.json
 var embeddedCatalog []byte
@@ -57,8 +56,6 @@ var catalogURLs = []string{
 	"https://raw.githubusercontent.com/valerimedvedev/giga-pisar/main/brain-local/catalog.json",
 	"https://raw.githubusercontent.com/valerimedvedev/giga-pisar/claude/new-repo-fork-package-i5w0kf/brain-local/catalog.json",
 }
-
-const llamaReleases = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 
 type Model struct {
 	ID      string  `json:"id"`
@@ -110,8 +107,10 @@ func main() {
 		serverB = flag.String("server-bin", "", "свой llama-server (для отладки)")
 		showVer = flag.Bool("version", false, "версия")
 		catFlag = flag.String("catalog", "", "свой каталог моделей: файл или адрес (тогда каталог с GitHub не берётся)")
+		llamaU  = flag.String("llama-url", "", "адрес архива llama.cpp, если автоматический подбор не справился")
 	)
 	flag.Parse()
+	llamaURLFlag = *llamaU
 	if *showVer {
 		fmt.Println("GigaBrain", version)
 		return
@@ -431,89 +430,205 @@ func askBackend() string {
 
 var errNotFound = errors.New("404")
 
-// Сборка llama.cpp под платформу: имена файлов в выпусках.
-func llamaAssetPattern() (*regexp.Regexp, error) {
-	be := cfg.Backend
-	if be == "" {
-		be = "cpu"
-	}
-	switch runtime.GOOS + "/" + runtime.GOARCH {
-	case "windows/amd64":
-		switch be {
-		case "vulkan":
-			return regexp.MustCompile(`bin-win-vulkan-x64\.zip$`), nil
-		case "cuda":
-			return regexp.MustCompile(`bin-win-cuda-1[23][\.\d]*-x64\.zip$`), nil
-		default:
-			return regexp.MustCompile(`bin-win-cpu-x64\.zip$`), nil
+// Сборка llama.cpp под платформу — по ключевым словам в имени файла:
+// схема имён в выпусках меняется (b1234 → v0.5.0), жёсткий шаблон ломается.
+type asset struct{ Name, URL string }
+
+var gpuWords = []string{"cuda", "cu11", "cu12", "cu13", "vulkan", "hip", "rocm", "sycl", "opencl", "openvino", "musa", "cann"}
+
+func has(name string, words ...string) bool {
+	n := strings.ToLower(name)
+	for _, w := range words {
+		if strings.Contains(n, w) {
+			return true
 		}
-	case "windows/arm64":
-		return regexp.MustCompile(`bin-win-cpu-arm64\.zip$`), nil
-	case "darwin/arm64":
-		return regexp.MustCompile(`bin-macos-arm64\.(zip|tar\.gz)$`), nil
-	case "darwin/amd64":
-		return regexp.MustCompile(`bin-macos-x64\.(zip|tar\.gz)$`), nil
-	case "linux/amd64":
-		if be == "vulkan" {
-			return regexp.MustCompile(`bin-ubuntu-vulkan-x64\.(zip|tar\.gz)$`), nil
-		}
-		return regexp.MustCompile(`bin-ubuntu-x64\.(zip|tar\.gz)$`), nil
-	case "linux/arm64":
-		return regexp.MustCompile(`bin-ubuntu-arm64\.(zip|tar\.gz)$`), nil
 	}
-	return nil, fmt.Errorf("нет сборки llama.cpp для %s/%s", runtime.GOOS, runtime.GOARCH)
+	return false
 }
 
-func installLlama() error {
-	pat, err := llamaAssetPattern()
-	if err != nil {
+// Подходит ли файл под платформу и вариант счёта. Возвращает вес: чем больше, тем лучше.
+func assetScore(name, backend string) int {
+	return assetScoreFor(name, backend, runtime.GOOS, runtime.GOARCH)
+}
+
+func assetScoreFor(name, backend, goos, goarch string) int {
+	n := strings.ToLower(name)
+	if !strings.HasSuffix(n, ".zip") && !strings.HasSuffix(n, ".tar.gz") && !strings.HasSuffix(n, ".tgz") {
+		return 0
+	}
+	if has(n, "cudart", "src", "source", "sha256", ".txt") {
+		return 0
+	}
+	// платформа
+	switch goos {
+	case "windows":
+		if !has(n, "win") {
+			return 0
+		}
+	case "darwin":
+		if !has(n, "macos", "darwin", "osx") {
+			return 0
+		}
+	default:
+		if !has(n, "ubuntu", "linux") {
+			return 0
+		}
+	}
+	// архитектура
+	switch goarch {
+	case "amd64":
+		if has(n, "arm64", "aarch64") {
+			return 0
+		}
+	case "arm64":
+		if !has(n, "arm64", "aarch64") {
+			return 0
+		}
+	}
+	score := 10
+	switch backend {
+	case "cuda":
+		if !has(n, "cuda", "cu11", "cu12", "cu13") {
+			return 0
+		}
+		if has(n, "cu12", "cuda-12", "cuda12") {
+			score += 5 // самая ходовая версия CUDA
+		}
+	case "vulkan":
+		if !has(n, "vulkan") {
+			return 0
+		}
+	default: // cpu: файл с «cpu», а если таких нет — без слов про видеокарты
+		if has(n, gpuWords...) {
+			return 0
+		}
+		if has(n, "cpu") {
+			score += 5
+		}
+		if has(n, "avx512") {
+			score -= 3 // не на всех процессорах
+		}
+		if has(n, "openblas", "noavx") {
+			score -= 5
+		}
+	}
+	return score
+}
+
+// Лучший файл из выпуска (и cudart для CUDA на Windows), либо пусто.
+func pickAsset(assets []asset, backend string) (best, cudart asset) {
+	return pickAssetFor(assets, backend, runtime.GOOS, runtime.GOARCH)
+}
+
+func pickAssetFor(assets []asset, backend, goos, goarch string) (best, cudart asset) {
+	bestScore := 0
+	for _, a := range assets {
+		if sc := assetScoreFor(a.Name, backend, goos, goarch); sc > bestScore {
+			best, bestScore = a, sc
+		}
+		if backend == "cuda" && goos == "windows" && has(a.Name, "cudart") && has(a.Name, "win") {
+			if cudart.URL == "" || has(a.Name, "cu12", "cuda-12", "cuda12") {
+				cudart = a
+			}
+		}
+	}
+	return
+}
+
+type release struct {
+	Tag    string  `json:"tag_name"`
+	Assets []asset `json:"assets"`
+}
+
+func (a *asset) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Name string `json:"name"`
+		URL  string `json:"browser_download_url"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	fmt.Printf("== Скачиваю llama.cpp (%s)\n", cfg.Backend)
-	req, _ := http.NewRequest("GET", llamaReleases, nil)
+	a.Name, a.URL = raw.Name, raw.URL
+	return nil
+}
+
+func githubJSON(u string, v any) error {
+	req, _ := http.NewRequest("GET", u, nil)
 	req.Header.Set("User-Agent", "giga-pisar-brain")
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	var rel struct {
-		Tag    string `json:"tag_name"`
-		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-		} `json:"assets"`
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("GitHub ответил %s", resp.Status)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	return json.NewDecoder(resp.Body).Decode(v)
+}
+
+var llamaURLFlag string
+
+func installLlama() error {
+	bin := filepath.Join(home, "bin")
+	if llamaURLFlag != "" {
+		fmt.Printf("== Скачиваю llama.cpp по адресу %s\n", llamaURLFlag)
+		if err := fetchArchive(llamaURLFlag, bin, "llama-server"); err != nil {
+			return err
+		}
+		cfg.Llama = "custom"
+		saveConfig()
+		return nil
+	}
+	fmt.Printf("== Скачиваю llama.cpp (%s)\n", cfg.Backend)
+	var rels []release
+	if err := githubJSON("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=6", &rels); err != nil {
 		return fmt.Errorf("GitHub не отдал список выпусков: %w", err)
 	}
-	var mainURL, cudartURL string
-	for _, a := range rel.Assets {
-		if mainURL == "" && pat.MatchString(a.Name) {
-			mainURL = a.URL
-		}
-		if cfg.Backend == "cuda" && strings.HasPrefix(a.Name, "cudart") && strings.Contains(a.Name, "win") {
-			cudartURL = a.URL
+	if len(rels) == 0 {
+		return errors.New("GitHub вернул пустой список выпусков")
+	}
+	var best, cudart asset
+	var tag string
+	for _, r := range rels { // свежий выпуск может быть ещё без сборок — берём следующий
+		best, cudart = pickAsset(r.Assets, cfg.Backend)
+		if best.URL != "" {
+			tag = r.Tag
+			break
 		}
 	}
-	if mainURL == "" {
-		return fmt.Errorf("в выпуске %s нет сборки под %s — посмотрите https://github.com/ggml-org/llama.cpp/releases и запустите с --backend cpu", rel.Tag, cfg.Backend)
+	if best.URL == "" {
+		fmt.Printf("\n! В выпуске %s не нашёл сборку под %s/%s (%s). Файлы выпуска:\n", rels[0].Tag, runtime.GOOS, runtime.GOARCH, cfg.Backend)
+		for i, a := range rels[0].Assets {
+			fmt.Printf("   %2d. %s\n", i+1, a.Name)
+		}
+		fmt.Print("Номер нужного файла (Enter — отмена): ")
+		line, _ := stdin.ReadString('\n')
+		n, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || n < 1 || n > len(rels[0].Assets) {
+			return fmt.Errorf("сборка не выбрана. Можно указать адрес архива: --llama-url <адрес>, или считать на процессоре: --backend cpu")
+		}
+		best, tag = rels[0].Assets[n-1], rels[0].Tag
+		_, cudart = pickAsset(rels[0].Assets, "cuda")
 	}
-	bin := filepath.Join(home, "bin")
-	if err := fetchArchive(mainURL, bin, "llama-server"); err != nil {
+	fmt.Printf("   %s → %s\n", tag, best.Name)
+	if err := fetchArchive(best.URL, bin, "llama-server"); err != nil {
 		return err
 	}
-	if cudartURL != "" {
-		if err := fetchArchive(cudartURL, bin, ""); err != nil {
+	if cfg.Backend == "cuda" && cudart.URL != "" {
+		fmt.Printf("   библиотеки CUDA: %s\n", cudart.Name)
+		if err := fetchArchive(cudart.URL, bin, ""); err != nil {
 			return fmt.Errorf("библиотеки CUDA: %w", err)
 		}
 	}
 	if runtime.GOOS != "windows" {
 		os.Chmod(filepath.Join(bin, "llama-server"), 0o755)
 	}
-	cfg.Llama = rel.Tag
+	if _, err := os.Stat(filepath.Join(bin, exe("llama-server"))); err != nil {
+		return fmt.Errorf("в архиве %s не оказалось llama-server", best.Name)
+	}
+	cfg.Llama = tag
 	saveConfig()
-	fmt.Printf("   ✓ llama.cpp %s\n", rel.Tag)
+	fmt.Printf("   ✓ llama.cpp %s\n", tag)
 	return nil
 }
 
