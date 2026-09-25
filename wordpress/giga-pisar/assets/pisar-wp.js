@@ -13,7 +13,7 @@
 import { Engine } from "./giga/engine.js";
 import { Mic } from "./giga/mic.js";
 import * as store from "./giga/model-store.js";
-import { Brain, CHIPS, parseCommand, stripAddress, listLocalModels, probeLocal, LOCAL_CANDIDATES } from "./giga/brain.js";
+import { Brain, CHIPS, parseCommand, stripAddress, actionLabel, listLocalModels, probeLocal, LOCAL_CANDIDATES } from "./giga/brain.js";
 
 const cfg = window.GigaPisarConfig || {};
 // По-русски, если русский у сайта или у браузера человека
@@ -143,6 +143,7 @@ function editableAdapter(el) {
 // ─────────────────────────── интерфейс: кнопка, подсказка, окно ───────────────────────────
 
 const MIC = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>';
+const BRAIN = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 2a3.5 3.5 0 0 0-3.46 3A3.5 3.5 0 0 0 3 8.5c0 .9.34 1.72.9 2.34A3.5 3.5 0 0 0 3 13.5 3.5 3.5 0 0 0 5.6 16.9 3.5 3.5 0 0 0 9 20h1V2H9zm6 0a3.5 3.5 0 0 1 3.46 3A3.5 3.5 0 0 1 21 8.5c0 .9-.34 1.72-.9 2.34A3.5 3.5 0 0 1 21 13.5a3.5 3.5 0 0 1-2.6 3.4A3.5 3.5 0 0 1 15 20h-1V2h1z"/></svg>';
 const STOP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>';
 
 const CSS = `
@@ -157,7 +158,51 @@ const CSS = `
 .fab:hover { transform: scale(1.08); }
 .fab[data-state="recording"] { background: #d93025; }
 .fab[data-state="busy"] { background: #6b7280; cursor: progress; }
-.fab[hidden], .bubble[hidden], .veil[hidden], [hidden] { display: none !important; }
+.fab.brain { background: #5b4fcf; }
+.fab.brain[data-open="1"] { box-shadow: 0 0 0 3px rgba(91,79,207,.35), 0 2px 8px rgba(0,0,0,.25); }
+.fab[hidden], .bubble[hidden], .veil[hidden], .panel[hidden], [hidden] { display: none !important; }
+.panel {
+  position: fixed; z-index: 2147483001; width: 340px; max-width: calc(100vw - 8px); max-height: min(70vh, 560px);
+  overflow: auto; padding: 10px 12px; border-radius: 10px;
+  background: #1f2328; color: #f3f4f6; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.panel .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.panel .head b { flex: 1; font-weight: 600; }
+.panel .head .who { color: #9ca3af; font-size: 12px; }
+.panel .scope { color: #9ca3af; font-size: 12px; margin: 0 0 8px; }
+.panel .scope.warn { color: #fde68a; }
+.panel .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.panel button {
+  border: 1px solid #4b5563; background: #374151; color: #f9fafb; border-radius: 6px;
+  padding: 4px 9px; font-size: 13px; cursor: pointer;
+}
+.panel button:hover { background: #4b5563; }
+.panel button:disabled { opacity: .45; cursor: default; }
+.panel button.icon { padding: 2px 6px; background: transparent; border-color: transparent; font-size: 14px; }
+.panel button.icon:hover { background: #374151; }
+.panel button.primary { background: #21a038; border-color: #21a038; }
+.panel button.primary:hover { background: #1b8a30; }
+.panel .own { margin-top: 10px; border-top: 1px solid #374151; padding-top: 8px; }
+.panel .own label { display: block; color: #9ca3af; font-size: 12px; margin-bottom: 4px; }
+.panel textarea {
+  width: 100%; min-height: 54px; resize: vertical; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid #4b5563; background: #111827; color: #f9fafb; font: 13px/1.4 system-ui, sans-serif;
+}
+.panel .row { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+.panel .row .spacer { flex: 1; }
+.panel .hist { margin: 8px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; }
+.panel .hist li { display: flex; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 5px; cursor: pointer; }
+.panel .hist li:hover { background: #2b3138; }
+.panel .hist li .t { flex: 1; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .hist li.pinned .t { color: #fde68a; }
+.panel .hist li .pin { opacity: .45; }
+.panel .hist li.pinned .pin { opacity: 1; }
+.panel .status { margin-top: 8px; font-size: 12.5px; color: #9ca3af; min-height: 1.2em; }
+.panel .status[data-kind="ok"] { color: #86efac; }
+.panel .status[data-kind="error"] { color: #fca5a5; }
+.panel .status[data-kind="warn"] { color: #fde68a; }
+.panel .foot { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+.panel .foot .spacer { flex: 1; }
 .bubble {
   position: fixed; z-index: 2147483001; max-width: 320px; padding: 8px 10px; border-radius: 8px;
   background: #1f2328; color: #f3f4f6; box-shadow: 0 4px 16px rgba(0,0,0,.3);
@@ -207,20 +252,28 @@ class UI {
     this.root = host.attachShadow({ mode: "open" });
     this.root.innerHTML = `<style>${CSS}</style>
       <button class="fab" type="button" hidden aria-label="${L("Диктовать", "Dictate")}" title="${L("Голосовой ввод", "Voice input")}">${MIC}</button>
+      <button class="fab brain" type="button" hidden aria-label="${L("Мозг", "Brain")}" title="${L("Мозг Писаря: команды, свой промпт, вернуть как было", "Pisar's brain: commands, own prompt, undo")}">${BRAIN}</button>
+      <div class="panel" hidden role="dialog" aria-label="${L("Мозг Писаря", "Pisar's brain")}"></div>
       <div class="bubble" hidden role="status" aria-live="polite"><div class="text"></div><div class="row"></div></div>
       <div class="veil" hidden><div class="dialog" role="dialog" aria-modal="true"></div></div>`;
     document.documentElement.append(host);
     this.host = host;
-    this.fab = this.root.querySelector(".fab");
+    this.fab = this.root.querySelector(".fab:not(.brain)");
+    this.fabBrain = this.root.querySelector(".fab.brain");
+    this.panel = this.root.querySelector(".panel");
     this.bubble = this.root.querySelector(".bubble");
     this.bubbleText = this.root.querySelector(".bubble .text");
     this.bubbleRow = this.root.querySelector(".bubble .row");
     this.veil = this.root.querySelector(".veil");
     this.dialog = this.root.querySelector(".dialog");
     // Кнопки не забирают фокус у поля: курсор и выделение остаются на месте.
-    this.root.addEventListener("mousedown", (e) => { if (!this.veil.contains(e.target)) e.preventDefault(); });
+    this.root.addEventListener("mousedown", (e) => {
+      if (this.veil.contains(e.target) || e.target.closest?.("textarea, input, select")) return;
+      e.preventDefault();
+    });
     this.anchor = null;
     this.hideTimer = null;
+    this.brainOn = false;    // показывать ли кнопку мозга (мозг доступен этому человеку)
   }
 
   contains(node) { return node === this.host; }
@@ -237,7 +290,8 @@ class UI {
     const r = rectOf(el);
     const visible = r.bottom > 0 && r.top < innerHeight && r.width > 40 && r.height > 12;
     this.fab.hidden = !visible;
-    if (!visible) return;
+    this.fabBrain.hidden = !visible || !this.brainOn;
+    if (!visible) { this.hidePanel(); return; }
     const size = 30;
     const top = r.height < 60 ? r.top + (r.height - size) / 2 : r.bottom - size - 6;
     let left = r.right - size - 6;
@@ -245,7 +299,34 @@ class UI {
     left = Math.min(left, innerWidth - size - 4);
     this.fab.style.top = `${Math.max(4, top)}px`;
     this.fab.style.left = `${Math.max(4, left)}px`;
+    // мозг — слева от микрофона
+    this.fabBrain.style.top = this.fab.style.top;
+    this.fabBrain.style.left = `${Math.max(4, left - size - 6)}px`;
     this.placeBubble();
+    this.placePanel();
+  }
+
+  /** Панель мозга — под кнопками, правым краем к микрофону. */
+  placePanel() {
+    if (this.panel.hidden) return;
+    const a = rectOf(this.fab.hidden ? (this.anchor || this.fab) : this.fab);
+    const p = this.panel.getBoundingClientRect();
+    let top = a.bottom + 8;
+    if (top + p.height > innerHeight - 4) top = Math.max(4, a.top - p.height - 8);
+    const left = Math.min(Math.max(4, a.right - p.width), innerWidth - p.width - 4);
+    this.panel.style.top = `${top}px`;
+    this.panel.style.left = `${left}px`;
+  }
+
+  showPanel() {
+    this.panel.hidden = false;
+    this.fabBrain.dataset.open = "1";
+    this.placePanel();
+  }
+
+  hidePanel() {
+    this.panel.hidden = true;
+    delete this.fabBrain.dataset.open;
   }
 
   placeBubble() {
@@ -345,6 +426,38 @@ class UI {
 
 // ─────────────────────────── сам Писарь ───────────────────────────
 
+/** Подпись «что делаю» для команды, на любом языке команды. */
+function actionLabelSafe(command) {
+  try { return actionLabel(command); } catch { return L("Работаю…", "Working…"); }
+}
+
+/** История своих промптов: до 100, новый вытесняет самый старый НЕзакреплённый. */
+const promptHistory = {
+  MAX: 100,
+  key: "giga.prompts",
+  list() {
+    try { return JSON.parse(localStorage.getItem(this.key) || "[]") || []; } catch { return []; }
+  },
+  save(items) {
+    try { localStorage.setItem(this.key, JSON.stringify(items)); } catch { /* приватное окно */ }
+  },
+  add(text) {
+    let items = this.list().filter((i) => i.text !== text);
+    const prev = this.list().find((i) => i.text === text);
+    items.unshift({ text, pinned: !!prev?.pinned, ts: Date.now() });
+    while (items.length > this.MAX) {
+      // самый старый незакреплённый — с конца; если все закреплены, ничего не вытесняем
+      let idx = -1;
+      for (let i = items.length - 1; i >= 0; i--) if (!items[i].pinned) { idx = i; break; }
+      if (idx < 0) break;
+      items.splice(idx, 1);
+    }
+    this.save(items);
+  },
+  togglePin(i) { const items = this.list(); if (items[i]) { items[i].pinned = !items[i].pinned; this.save(items); } },
+  remove(i) { const items = this.list(); items.splice(i, 1); this.save(items); },
+};
+
 class Pisar {
   constructor() {
     this.ui = new UI();
@@ -358,15 +471,27 @@ class Pisar {
     this.brain = cfg.brain ? this.makeBrain(cfg.brain) : null;
 
     this.ext = null;                   // блок редактора, у которого стоит кнопка (float())
-    // правый клик по микрофону — настройки мозга (если сайт разрешил свой мозг)
-    this.ui.fab.addEventListener("contextmenu", (e) => {
-      if (!this.brain || !cfg.brainLocal) return;
-      e.preventDefault();
-      if (this.state === "idle") this.brainSettings();
+    this.ui.brainOn = !!this.brain;    // права: мозг показывается только тем, кому его открыл сайт
+    this.ui.fabBrain.addEventListener("click", () => this.togglePanel());
+    // выделение в поле запоминаем, пока фокус ещё там: панель его потом переживёт
+    document.addEventListener("selectionchange", () => {
+      const a = document.activeElement;
+      if (a && a === this.field && this.target?.el === a) {
+        this.target.remember?.();
+        // панель открыта — обновить «над чем работаем»
+        if (!this.ui.panel.hidden && this.state === "idle") {
+          const sc = this.ui.panel.querySelector(".scope");
+          if (sc) { const scope = this.scopeOf(this.target); sc.textContent = scope.label; sc.classList.toggle("warn", scope.whole === null); }
+        }
+      }
     });
-    this.ui.fab.title = this.brain && cfg.brainLocal
-      ? L("Голосовой ввод · правый клик — мозг", "Voice input · right-click — brain")
-      : L("Голосовой ввод", "Voice input");
+    document.addEventListener("mousedown", (e) => {
+      // клик мимо панели, кнопок и самого поля — закрыть панель (в поле можно менять выделение)
+      if (this.ui.panel.hidden) return;
+      const path = e.composedPath();
+      if (path.includes(this.ui.host) || (this.field && path.includes(this.field)) || (this.ext && path.includes(this.ext.el))) return;
+      this.ui.hidePanel();
+    }, true);
     this.ui.fab.addEventListener("click", () => {
       if (this.field) this.toggle(this.adapterFor(this.field));
       else if (this.ext) this.toggle(this.ext.adapter, this.ext.el);
@@ -375,12 +500,14 @@ class Pisar {
     this.follow = () => {
       const el = this.state !== "idle" && this.target ? this.target.anchor : this.field || this.ext?.el;
       if (el && el.isConnected && (!this.ui.fab.hidden || this.state !== "idle")) this.ui.placeFab(el, !this.field);
-      else if (!this.ui.bubble.hidden) this.ui.placeBubble();
+      else { this.ui.placeBubble(); this.ui.placePanel(); }
     };
     this.watchWindow(window);
     if (cfg.floating !== false) this.watchFields();
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.state === "recording") this.cancel();
+      if (e.key !== "Escape") return;
+      if (this.state === "recording") this.cancel();
+      else if (!this.ui.panel.hidden) { this.ui.hidePanel(); this.refocus(); }
     }, true);
   }
 
@@ -442,9 +569,11 @@ class Pisar {
       setTimeout(() => {
         const a = document.activeElement;
         if (this.state !== "idle" || (a && (a === this.field || this.ui.contains(a)))) return;
+        if (!this.ui.panel.hidden) return;         // панель открыта — кнопки нужны
         this.field = null;
         if (this.ext) { this.follow(); return; }   // у блока редактора кнопка остаётся
         this.ui.fab.hidden = true;
+        this.ui.fabBrain.hidden = true;
         if (!this.ui.bubbleRow.childElementCount) this.ui.hideBubble();
       }, 150);
     });
@@ -465,7 +594,7 @@ class Pisar {
     if (cfg.floating === false) return;
     this.ext = target;
     if (!target) {
-      if (this.state === "idle" && !this.field) this.ui.fab.hidden = true;
+      if (this.state === "idle" && !this.field && this.ui.panel.hidden) { this.ui.fab.hidden = true; this.ui.fabBrain.hidden = true; }
       return;
     }
     const win = target.el.ownerDocument.defaultView;
@@ -652,8 +781,12 @@ class Pisar {
       const out = await this.brain.transform(source, command, mode, (stage) => this.say(stage, "busy"));
       if (whole === null) t.insert(out);
       else t.replace(out, whole);
+      this.canUndo = !!t.undo;
       this.offerChips(done, true);
+      this.panelStatus(done, "ok");
     } catch (e) {
+      this.canUndo = false;
+      this.panelStatus(L(`Не справился: ${e.message}`, `Failed: ${e.message}`), "error");
       if (fallback) {
         t.insert(fallback);
         this.say(L(`Писарь не справился (${e.message}) — вставил как есть`, `Pisar could not do it (${e.message}) — inserted as is`), "error", { hideAfter: 8000 });
@@ -662,42 +795,172 @@ class Pisar {
       }
     }
     this.setState("idle");
+    if (!this.ui.panel.hidden) this.renderPanel();
   }
 
-  /** После вставки: кнопки мозга (если он открыт) и «Вернуть как было». */
+  /** После вставки — короткий статус; всё остальное живёт в панели 🧠 и не исчезает. */
   offerChips(text, canUndo = false) {
     const t = this.target;
     const buttons = [];
-    if (this.brain) {
-      // кнопки из настроек сайта (название + команда); без них — вшитые
-      const enabled = Array.isArray(cfg.chips) && cfg.chips.length && typeof cfg.chips[0] === "object" ? cfg.chips : CHIPS;
-      for (const chip of enabled) {
-        buttons.push({
-          title: chip.title,
-          onClick: async () => {
-            const sel = t.selection();
-            const whole = sel.empty ? t.wholeText() : null;
-            if (sel.empty && whole === null) {
-              this.say(L("Выделите текст, который поправить", "Select the text to change"), "warn", { hideAfter: 4000 });
-              return;
-            }
-            if (!(await this.brainReady())) return;
-            await this.runBrain(sel.empty ? whole : sel.text, chip.command, "selection", sel.empty,
-              L("Готово", "Done"));
-          },
-        });
-      }
-    }
-    if (this.brain && cfg.brainLocal) {
-      buttons.push({ title: "⚙ " + L("Мозг", "Brain"), onClick: () => this.brainSettings() });
-    }
     if (canUndo && t.undo) {
       buttons.push({
         title: L("Вернуть как было", "Put it back"),
-        onClick: () => { if (t.undo()) this.say(L("Вернул как было", "Restored"), "ok", { hideAfter: 3000 }); },
+        onClick: () => this.undo(),
       });
     }
-    this.say(text, "ok", { buttons, hideAfter: buttons.length ? 12000 : 3000 });
+    const hint = this.brain && !canUndo ? L(" · кнопка 🧠 — правка нейронкой", " · 🧠 — edit with the brain") : "";
+    this.say(text + hint, "ok", { buttons, hideAfter: buttons.length ? 12000 : 4000 });
+  }
+
+  undo() {
+    const t = this.target;
+    if (t?.undo && t.undo()) {
+      this.canUndo = false;
+      this.say(L("Вернул как было", "Restored"), "ok", { hideAfter: 3000 });
+      this.panelStatus(L("Вернул как было", "Restored"), "ok");
+      if (!this.ui.panel.hidden) this.renderPanel();
+    }
+  }
+
+  // ── панель мозга 🧠
+
+  /** Список команд сайта: из настроек (название + команда), без них — вшитые. */
+  siteChips() {
+    return Array.isArray(cfg.chips) && cfg.chips.length && typeof cfg.chips[0] === "object" ? cfg.chips : CHIPS;
+  }
+
+  /** Поле, над которым работает панель: то, где курсор, или блок редактора. */
+  panelTarget() {
+    if (this.field) return this.adapterFor(this.field);
+    if (this.ext) return this.ext.adapter;
+    return this.target;
+  }
+
+  togglePanel() {
+    if (!this.ui.panel.hidden) { this.ui.hidePanel(); this.refocus(); return; }
+    if (!this.brain) return;
+    const t = this.panelTarget();
+    if (!t) return;
+    if (t !== this.target) { this.canUndo = false; this.lastStatus = null; }   // другое поле — своя история правок
+    this.target = t;
+    t.remember?.();
+    this.renderPanel();
+    this.ui.showPanel();
+  }
+
+  panelStatus(text, kind = "") {
+    this.lastStatus = { text, kind };          // переживает перерисовку панели
+    const el = this.ui.panel.querySelector(".status");
+    if (el) { el.textContent = text; el.dataset.kind = kind; }
+  }
+
+  /** Что сейчас под мозгом: выделенное, весь текст поля или ничего. */
+  scopeOf(t) {
+    const sel = t.selection();
+    if (!sel.empty) return { text: sel.text, whole: false, label: L(`над выделенным (${sel.text.length} зн.)`, `on the selection (${sel.text.length} chars)`) };
+    const whole = t.wholeText();
+    if (whole !== null && whole.trim()) return { text: whole, whole: true, label: L("над всем текстом поля", "on the whole field") };
+    return { text: "", whole: null, label: whole === null ? L("выделите текст, который поправить", "select the text to change") : L("в поле пусто", "the field is empty") };
+  }
+
+  /** Команда мозгу над выделенным / всем текстом из панели. */
+  async runFromPanel(command) {
+    const t = this.target;
+    const scope = this.scopeOf(t);
+    if (!scope.text) { this.panelStatus(scope.label, "warn"); return; }
+    if (this.state !== "idle") return;
+    if (!(await this.brainReady())) { this.panelStatus(L("мозг не готов — см. подсказку", "the brain is not ready"), "warn"); return; }
+    this.panelStatus(actionLabelSafe(command), "");
+    await this.runBrain(scope.text, command, "selection", scope.whole, L("Готово", "Done"));
+  }
+
+  renderPanel() {
+    const b = this.brain, t = this.target, panel = this.ui.panel;
+    const busy = this.state !== "idle";
+    const local = b.chosenId === "local";
+    const who = local ? L("нейронка на моём компьютере", "brain on my computer")
+      : this.siteProvider === "gigachat" ? L("GigaChat на сервере", "GigaChat on the server") : L("Qwen в браузере", "Qwen in the browser");
+    const scope = t ? this.scopeOf(t) : { label: "", whole: null };
+    panel.textContent = "";
+    const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+    const head = h("div", "head");
+    head.append(h("b", null, L("Мозг Писаря", "Pisar's brain")), h("span", "who", who));
+    if (cfg.brainLocal) {
+      const gear = h("button", "icon", "⚙"); gear.type = "button"; gear.title = L("Где считает мозг", "Where the brain runs");
+      gear.addEventListener("click", () => { this.ui.hidePanel(); this.brainSettings(); });
+      head.append(gear);
+    }
+    const close = h("button", "icon", "✕"); close.type = "button"; close.title = L("Закрыть (Esc)", "Close (Esc)");
+    close.addEventListener("click", () => { this.ui.hidePanel(); this.refocus(); });
+    head.append(close);
+    panel.append(head);
+
+    panel.append(h("p", "scope" + (scope.whole === null ? " warn" : ""), scope.label));
+
+    const chips = h("div", "chips");
+    for (const chip of this.siteChips()) {
+      const btn = h("button", null, chip.title); btn.type = "button"; btn.disabled = busy; btn.title = chip.command;
+      btn.addEventListener("click", () => this.runFromPanel(chip.command));
+      chips.append(btn);
+    }
+    panel.append(chips);
+
+    // свой промпт — только с нейронкой на компьютере человека (его ресурсы, его правила)
+    const own = h("div", "own");
+    if (local) {
+      own.append(h("label", null, L("Свой промпт (что сделать с текстом):", "Own prompt (what to do with the text):")));
+      const ta = h("textarea"); ta.placeholder = L("например: переведи на немецкий и сделай список", "e.g. translate to German and make a list");
+      ta.value = this.ownPrompt || "";
+      ta.addEventListener("input", () => { this.ownPrompt = ta.value; });
+      ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run.click(); } });
+      own.append(ta);
+      const row = h("div", "row");
+      const run = h("button", "primary", L("Выполнить", "Run")); run.type = "button"; run.disabled = busy; run.title = "Ctrl+Enter";
+      run.addEventListener("click", () => {
+        const text = ta.value.trim();
+        if (!text) { this.panelStatus(L("напишите, что сделать", "type what to do"), "warn"); return; }
+        promptHistory.add(text);
+        this.ownPrompt = text;
+        this.renderPanel();
+        this.runFromPanel(text);
+      });
+      row.append(run, h("span", "spacer"), h("span", "who", L(`история: ${promptHistory.list().length}/${promptHistory.MAX}`, `history: ${promptHistory.list().length}/${promptHistory.MAX}`)));
+      own.append(row);
+      const list = promptHistory.list();
+      if (list.length) {
+        const ul = h("ul", "hist");
+        list.forEach((item, i) => {
+          const li = h("li", item.pinned ? "pinned" : ""); li.title = item.text;
+          const pin = h("button", "icon pin", "📌"); pin.type = "button";
+          pin.title = item.pinned ? L("Открепить", "Unpin") : L("Закрепить — не вытеснится из истории", "Pin — never pushed out of history");
+          pin.addEventListener("click", (e) => { e.stopPropagation(); promptHistory.togglePin(i); this.renderPanel(); });
+          const txt = h("span", "t", item.text);
+          const del = h("button", "icon", "✕"); del.type = "button"; del.title = L("Удалить из истории", "Remove from history");
+          del.addEventListener("click", (e) => { e.stopPropagation(); promptHistory.remove(i); this.renderPanel(); });
+          li.addEventListener("click", () => { ta.value = item.text; this.ownPrompt = item.text; ta.focus(); });
+          li.addEventListener("dblclick", () => { ta.value = item.text; this.ownPrompt = item.text; run.click(); });
+          li.append(pin, txt, del);
+          ul.append(li);
+        });
+        own.append(ul);
+      }
+    } else {
+      own.append(h("label", null, cfg.brainLocal
+        ? L("Свой промпт и история — с нейронкой на вашем компьютере: ⚙ → «Нейронка на моём компьютере».", "Own prompts and history — with the brain on your computer: ⚙ → “On my computer”.")
+        : L("Свой промпт доступен, когда сайт разрешает нейронку на компьютере пользователя.", "Own prompts are available when the site allows a local brain.")));
+    }
+    panel.append(own);
+
+    const foot = h("div", "foot");
+    const undo = h("button", null, L("Вернуть как было", "Put it back")); undo.type = "button"; undo.disabled = busy || !this.canUndo;
+    undo.addEventListener("click", () => this.undo());
+    foot.append(undo, h("span", "spacer"));
+    panel.append(foot);
+    const st = h("div", "status", this.lastStatus?.text || "");
+    st.dataset.kind = this.lastStatus?.kind || "";
+    panel.append(st);
+    this.ui.placePanel();
   }
 
   // ── мозг на компьютере человека
@@ -777,6 +1040,7 @@ class Pisar {
     b.chosenId = where === "local" ? "local" : this.siteProvider;
     b.localState = "unknown";
     try { localStorage.setItem("giga.brain.where", where); } catch { /* приватное окно */ }
+    if (!this.ui.panel.hidden) this.renderPanel();
     this.refocus();
     this.say(where === "local"
       ? L("Мозг: нейронка на вашем компьютере", "Brain: the model on your computer")
@@ -903,6 +1167,8 @@ window.GigaPisar = {
   diagnose,
   /** Окно «⚙ Мозг» (нейронка на компьютере человека); null — сайт этого не разрешил. */
   brainSettings: pisar.brain && cfg.brainLocal ? () => pisar.brainSettings() : null,
+  /** Открыть/закрыть панель мозга у текущего поля (null — мозг этому человеку не открыт). */
+  brainPanel: pisar.brain ? () => pisar.togglePanel() : null,
   /** Плавающая кнопка у блока редактора: { el, adapter } или null. */
   float: (target) => pisar.float(target),
   /** adapter — как у полей выше: selection/insert/replace/wholeText/undo/anchor. */
