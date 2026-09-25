@@ -11,7 +11,7 @@
 ```bash
 git clone -b claude/new-repo-fork-package-i5w0kf https://github.com/valerimedvedev/giga-pisar
 cd giga-pisar && bash wordpress/build.sh
-# → wordpress/dist/giga-pisar-1.2.0.zip (~6 МБ)
+# → wordpress/dist/giga-pisar-1.2.1.zip (~6 МБ)
 ```
 
 `build.sh` скачивает движки с registry.npmjs.org. Если на M туда нет выхода,
@@ -24,9 +24,9 @@ cd giga-pisar && bash wordpress/build.sh
 2. Положить архив и ссылку на последнюю версию:
    ```bash
    mkdir -p /var/www/<сайт>/downloads
-   cp giga-pisar-1.2.0.zip /var/www/<сайт>/downloads/
-   ln -sfn giga-pisar-1.2.0.zip /var/www/<сайт>/downloads/giga-pisar-latest.zip
-   sha256sum /var/www/<сайт>/downloads/giga-pisar-1.2.0.zip > /var/www/<сайт>/downloads/giga-pisar-1.2.0.zip.sha256
+   cp giga-pisar-1.2.1.zip /var/www/<сайт>/downloads/
+   ln -sfn giga-pisar-1.2.1.zip /var/www/<сайт>/downloads/giga-pisar-latest.zip
+   sha256sum /var/www/<сайт>/downloads/giga-pisar-1.2.1.zip > /var/www/<сайт>/downloads/giga-pisar-1.2.1.zip.sha256
    ```
 3. Если `/downloads/` ещё не раздаётся, добавить в server { } сайта:
    ```nginx
@@ -52,7 +52,7 @@ cd giga-pisar && bash wordpress/build.sh
 Можно сразу поставить плагин (только с согласия владельца сайта):
 
 ```bash
-wp plugin install /path/giga-pisar-1.2.0.zip --activate --path=/var/www/<wp-сайт>
+wp plugin install /path/giga-pisar-1.2.1.zip --activate --path=/var/www/<wp-сайт>
 ```
 
 Потом в админке: Гига Писарь → Модели на сервере → «Скачать на сервер» у
