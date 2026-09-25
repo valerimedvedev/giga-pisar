@@ -76,6 +76,10 @@ function giga_pisar_settings_page() {
 			<?php endforeach; ?>
 		</nav>
 
+		<?php if ( 'general' === $tab ) : ?>
+			<?php giga_pisar_diagnostics_box(); ?>
+		<?php endif; ?>
+
 		<?php if ( 'models' === $tab ) : ?>
 			<?php giga_pisar_models_tab(); ?>
 		<?php else : ?>
@@ -179,5 +183,43 @@ function giga_pisar_models_tab() {
 		</table>
 		<?php submit_button(); ?>
 	</form>
+	<?php
+}
+
+/** «Проверка в этом браузере»: что мешает диктовке прямо здесь и сейчас. */
+function giga_pisar_diagnostics_box() {
+	$enabled = giga_pisar_can_dictate( 'admin' );
+	?>
+	<div class="card" style="max-width:900px;margin-top:16px">
+		<h2 class="title"><?php esc_html_e( 'Проверка в этом браузере', 'giga-pisar' ); ?></h2>
+		<?php if ( ! $enabled ) : ?>
+			<p><?php esc_html_e( 'Диктовка в админке выключена — проверка работает, когда включена галочка «В админке».', 'giga-pisar' ); ?></p>
+		<?php else : ?>
+			<table class="widefat striped" id="giga-pisar-diag"><tbody>
+				<tr><td><?php esc_html_e( 'Проверяю…', 'giga-pisar' ); ?></td></tr>
+			</tbody></table>
+			<p class="description"><?php esc_html_e( 'Где кнопки: плавающий микрофон — у края поля, где стоит курсор; в блочном редакторе — значок микрофона на панели выбранного блока с текстом; в классическом — на панели форматирования.', 'giga-pisar' ); ?></p>
+			<script>
+			( function () {
+				const tbody = document.querySelector( '#giga-pisar-diag tbody' );
+				const esc = ( s ) => String( s ).replace( /[&<>"]/g, ( c ) => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ c ] ) );
+				const show = ( rows ) => {
+					tbody.innerHTML = rows.map( ( r ) => '<tr><td style="width:24px">' + ( r.ok ? '✅' : '❌' ) + '</td><td><strong>' + esc( r.name ) + '</strong></td><td>' + esc( r.detail || '' ) + '</td></tr>' ).join( '' );
+				};
+				const run = () => window.GigaPisar.diagnose().then( show );
+				if ( window.GigaPisar ) {
+					run();
+				} else {
+					document.addEventListener( 'giga-pisar-ready', run, { once: true } );
+					setTimeout( () => {
+						if ( ! window.GigaPisar ) {
+							show( [ { ok: false, name: <?php echo wp_json_encode( __( 'Скрипт плагина не загрузился', 'giga-pisar' ) ); ?>, detail: <?php echo wp_json_encode( __( 'Скорее всего, его склеил или отложил плагин оптимизации (LiteSpeed, WP Rocket, Autoptimize) или Cloudflare Rocket Loader — исключите giga-pisar из оптимизации JS. Подробности — в консоли браузера (F12).', 'giga-pisar' ) ); ?> } ] );
+						}
+					}, 10000 );
+				}
+			}() );
+			</script>
+		<?php endif; ?>
+	</div>
 	<?php
 }

@@ -62,11 +62,28 @@ function giga_pisar_enqueue_core() {
 /** Наш главный скрипт — ES-модуль: ему нужны import и воркеры-модули. */
 function giga_pisar_module_tag( $tag, $handle ) {
 	if ( 'giga-pisar' === $handle && false === strpos( $tag, 'type="module"' ) ) {
-		$tag = str_replace( '<script ', '<script type="module" ', $tag );
 		$tag = preg_replace( '/\stype=([\'"])text\/javascript\1/', '', $tag, 1 );
+		// Плагины оптимизации (LiteSpeed, WP Rocket, Autoptimize, Cloudflare) любят
+		// склеивать и откладывать скрипты — модуль после этого не работает.
+		$tag = str_replace( '<script ', '<script type="module" data-no-optimize="1" data-no-defer="1" data-no-minify="1" data-cfasync="false" ', $tag );
 	}
 	return $tag;
 }
+
+// Те же исключения для плагинов оптимизации — через их собственные фильтры.
+function giga_pisar_optimizer_excludes( $list ) {
+	$list   = is_array( $list ) ? $list : array_filter( array_map( 'trim', explode( ',', (string) $list ) ) );
+	$list[] = 'giga-pisar';
+	return $list;
+}
+add_filter( 'litespeed_optimize_js_excludes', 'giga_pisar_optimizer_excludes' );
+add_filter( 'litespeed_optm_js_defer_exc', 'giga_pisar_optimizer_excludes' );
+add_filter( 'rocket_exclude_js', 'giga_pisar_optimizer_excludes' );
+add_filter( 'rocket_exclude_defer_js', 'giga_pisar_optimizer_excludes' );
+add_filter( 'rocket_delay_js_exclusions', 'giga_pisar_optimizer_excludes' );
+add_filter( 'autoptimize_filter_js_exclude', function ( $exclude ) {
+	return trim( $exclude . ', giga-pisar', ', ' );
+} );
 
 function giga_pisar_editor_buttons_enabled() {
 	return giga_pisar_opt( 'editor_buttons' ) && giga_pisar_can_dictate();
@@ -81,7 +98,7 @@ function giga_pisar_enqueue_block_editor() {
 	wp_enqueue_script(
 		'giga-pisar-block',
 		GIGA_PISAR_URL . 'assets/editor-block.js',
-		array( 'wp-rich-text', 'wp-block-editor', 'wp-element', 'wp-i18n' ),
+		array( 'wp-rich-text', 'wp-block-editor', 'wp-blocks', 'wp-components', 'wp-compose', 'wp-data', 'wp-element', 'wp-hooks' ),
 		GIGA_PISAR_VERSION,
 		true
 	);

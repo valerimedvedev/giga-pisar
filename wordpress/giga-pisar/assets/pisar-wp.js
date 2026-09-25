@@ -231,15 +231,18 @@ class UI {
     this.fab.setAttribute("aria-label", state === "recording" ? L("Стоп", "Stop") : L("Диктовать", "Dictate"));
   }
 
-  /** Кнопка у правого края поля: у однострочного — посередине, у многострочного — внизу. */
-  placeFab(el) {
-    const r = el.getBoundingClientRect();
+  /** Кнопка у правого края поля: у однострочного — посередине, у многострочного — внизу.
+   *  outside — справа снаружи (у блоков редактора, чтобы не закрывать текст). */
+  placeFab(el, outside = false) {
+    const r = rectOf(el);
     const visible = r.bottom > 0 && r.top < innerHeight && r.width > 40 && r.height > 12;
     this.fab.hidden = !visible;
     if (!visible) return;
     const size = 30;
     const top = r.height < 60 ? r.top + (r.height - size) / 2 : r.bottom - size - 6;
-    const left = Math.min(r.right - size - 6, innerWidth - size - 4);
+    let left = r.right - size - 6;
+    if (outside && r.right + size + 10 < innerWidth) left = r.right + 8;
+    left = Math.min(left, innerWidth - size - 4);
     this.fab.style.top = `${Math.max(4, top)}px`;
     this.fab.style.left = `${Math.max(4, left)}px`;
     this.placeBubble();
@@ -247,7 +250,7 @@ class UI {
 
   placeBubble() {
     if (this.bubble.hidden) return;
-    const a = (this.anchor && this.anchor.isConnected ? this.anchor : this.fab).getBoundingClientRect();
+    const a = rectOf(this.anchor && this.anchor.isConnected ? this.anchor : this.fab);
     const b = this.bubble.getBoundingClientRect();
     let top = a.bottom + 6;
     if (top + b.height > innerHeight - 4) top = a.top - b.height - 6;
@@ -353,9 +356,18 @@ class Pisar {
     this.modelReady = null;            // промис: пакет распознавания в браузере и загружен
     this.brain = cfg.brain ? this.makeBrain(cfg.brain) : null;
 
+    this.ext = null;                   // блок редактора, у которого стоит кнопка (float())
     this.ui.fab.addEventListener("click", () => {
       if (this.field) this.toggle(this.adapterFor(this.field));
+      else if (this.ext) this.toggle(this.ext.adapter, this.ext.el);
+      else if (this.state === "recording") this.stop();
     });
+    this.follow = () => {
+      const el = this.state !== "idle" && this.target ? this.target.anchor : this.field || this.ext?.el;
+      if (el && el.isConnected && (!this.ui.fab.hidden || this.state !== "idle")) this.ui.placeFab(el, !this.field);
+      else if (!this.ui.bubble.hidden) this.ui.placeBubble();
+    };
+    this.watchWindow(window);
     if (cfg.floating !== false) this.watchFields();
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.state === "recording") this.cancel();
@@ -418,18 +430,37 @@ class Pisar {
         const a = document.activeElement;
         if (this.state !== "idle" || (a && (a === this.field || this.ui.contains(a)))) return;
         this.field = null;
+        if (this.ext) { this.follow(); return; }   // у блока редактора кнопка остаётся
         this.ui.fab.hidden = true;
         if (!this.ui.bubbleRow.childElementCount) this.ui.hideBubble();
       }, 150);
     });
-    const follow = () => {
-      const el = this.state !== "idle" && this.target ? this.target.anchor : this.field;
-      if (el && el.isConnected && !this.ui.fab.hidden) this.ui.placeFab(el);
-      else if (!this.ui.bubble.hidden) this.ui.placeBubble();
-    };
-    addEventListener("scroll", follow, { capture: true, passive: true });
-    addEventListener("resize", follow, { passive: true });
-    this.follow = follow;
+  }
+
+  /** Следим за прокруткой окна (и холстов редактора в iframe), чтобы кнопка ехала с полем. */
+  watchWindow(win) {
+    this.watched ??= new WeakSet();
+    if (this.watched.has(win)) return;
+    this.watched.add(win);
+    win.addEventListener("scroll", () => this.follow(), { capture: true, passive: true });
+    win.addEventListener("resize", () => this.follow(), { passive: true });
+  }
+
+  /** Плавающая кнопка у блока редактора: { el, adapter } или null — убрать.
+   *  el может лежать в iframe холста — координаты пересчитываются. */
+  float(target) {
+    if (cfg.floating === false) return;
+    this.ext = target;
+    if (!target) {
+      if (this.state === "idle" && !this.field) this.ui.fab.hidden = true;
+      return;
+    }
+    const win = target.el.ownerDocument.defaultView;
+    if (win) this.watchWindow(win);
+    if (!this.field && this.state === "idle") {
+      this.ui.placeFab(target.el, true);
+      this.observe(target.el);
+    }
   }
 
   observe(el) {
@@ -700,6 +731,15 @@ class Pisar {
   }
 }
 
+/** Прямоугольник элемента в координатах главного окна (элемент может быть в iframe). */
+function rectOf(el) {
+  const r = el.getBoundingClientRect();
+  const frame = el.ownerDocument?.defaultView?.frameElement;
+  if (!frame || el.ownerDocument === document) return r;
+  const f = frame.getBoundingClientRect();
+  return new DOMRect(r.left + f.left + frame.clientLeft, r.top + f.top + frame.clientTop, r.width, r.height);
+}
+
 /** Самый внешний contenteditable, к которому относится элемент. */
 function findEditableRoot(el) {
   let root = el;
@@ -709,8 +749,50 @@ function findEditableRoot(el) {
 
 // ─────────────────────────── наружу: для редакторов ───────────────────────────
 
+/** Проверка «что мешает диктовке в этом браузере» — для страницы настроек. */
+async function diagnose() {
+  const rows = [];
+  const add = (name, ok, detail = "") => rows.push({ name, ok, detail });
+  add(L("Защищённое соединение (https)", "Secure connection (https)"), window.isSecureContext,
+    window.isSecureContext ? "" : L("без https браузер не даёт микрофон и хранилище", "without https there is no microphone or storage"));
+  add("WebAssembly", typeof WebAssembly === "object");
+  add(L("Запись звука (AudioWorklet)", "Audio capture (AudioWorklet)"), typeof AudioWorkletNode === "function");
+  add(L("Хранилище браузера", "Browser storage"), store.storageAvailable(),
+    store.storageAvailable() ? "" : L("приватное окно или https нет", "private window or no https"));
+  const head = async (url) => {
+    try { return (await fetch(url, { method: "HEAD", cache: "no-store" })).status; } catch { return 0; }
+  };
+  const ort = await head(new URL("./vendor/ort/ort.wasm.min.mjs", import.meta.url).href);
+  add(L("Движок распознавания в плагине", "Recognition engine in the plugin"), ort === 200,
+    ort === 200 ? "" : L(`vendor/ort не отдаётся (${ort}) — плагин собран без движков? Возьмём с CDN`, `vendor/ort is not served (${ort})`));
+  if (cfg.modelUrl) {
+    const m = await head(cfg.modelUrl);
+    add(L("Пакет распознавания на сервере", "Speech package on the server"), m === 200, m === 200 ? "" : L(`адрес отвечает ${m}`, `the URL answers ${m}`));
+  } else {
+    add(L("Пакет распознавания на сервере", "Speech package on the server"), false,
+      L("не выложен — вкладка «Модели на сервере»", "not hosted — see the Models tab"));
+  }
+  let inBrowser = false;
+  try { inBrowser = await store.hasModel(); } catch { /* нет хранилища */ }
+  add(L("Пакет в этом браузере", "Package in this browser"), true,
+    inBrowser ? L("скачан", "downloaded") : L("ещё нет — скачается при первом нажатии на микрофон", "not yet — downloaded on the first mic press"));
+  try {
+    const p = await navigator.permissions.query({ name: "microphone" });
+    add(L("Микрофон", "Microphone"), p.state !== "denied",
+      { granted: L("разрешён", "allowed"), prompt: L("спросит при первой записи", "will ask on first use"), denied: L("запрещён в настройках сайта", "blocked in site settings") }[p.state]);
+  } catch {
+    add(L("Микрофон", "Microphone"), true, L("браузер спросит при первой записи", "the browser will ask"));
+  }
+  add(L("Многопоточность", "Multithreading"), true, crossOriginIsolated ? L("включена", "on") : L("выключена — работает в один поток", "off — single thread"));
+  add(L("Мозг для вас", "Brain for you"), true, cfg.brain || L("выключен", "off"));
+  return rows;
+}
+
 const pisar = new Pisar();
 window.GigaPisar = {
+  diagnose,
+  /** Плавающая кнопка у блока редактора: { el, adapter } или null. */
+  float: (target) => pisar.float(target),
   /** adapter — как у полей выше: selection/insert/replace/wholeText/undo/anchor. */
   toggle: (adapter, anchor) => pisar.toggle(adapter, anchor),
   get state() { return pisar.state; },
