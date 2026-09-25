@@ -3,5 +3,4 @@
     <!-- модели весят гигабайты — в облачную копию не идут -->
     <exclude domain="file" path="gigaam" />
     <exclude domain="file" path="llm" />
-    <exclude domain="cache" path="." />
 </full-backup-content>
