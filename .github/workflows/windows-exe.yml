@@ -1,0 +1,37 @@
+# Собирает Гигу Писаря для Windows (10/11 и 7/8) и выкладывает в выпуск windows-latest:
+#   https://github.com/valerimedvedev/giga-pisar/releases/download/windows-latest/GigaPisar.exe
+#   https://github.com/valerimedvedev/giga-pisar/releases/download/windows-latest/GigaPisar-win7.exe
+name: Windows EXE
+on:
+  workflow_dispatch:
+  push:
+    paths: ["windows/**", ".github/workflows/windows-exe.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: windows-exe
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - name: Сборка (оба варианта)
+        run: bash windows/build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: GigaPisar, path: "windows/dist/*" }
+      - name: Выпуск windows-latest
+        if: github.ref == 'refs/heads/claude/new-repo-fork-package-i5w0kf' || github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-latest
+          name: "Гига Писарь для Windows — последняя сборка"
+          body: "GigaPisar.exe — Windows 10/11; GigaPisar-win7.exe — Windows 7/8/8.1. Один файл, ничего ставить не нужно. Собрано автоматически из ветки ${{ github.ref_name }}, коммит ${{ github.sha }}."
+          prerelease: true
+          files: |
+            windows/dist/GigaPisar.exe
+            windows/dist/GigaPisar-win7.exe
+            windows/dist/SHA256SUMS.txt
