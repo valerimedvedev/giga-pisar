@@ -22,6 +22,7 @@ class Store(context: Context) {
     var cloudService: String get() = p.getString("cloud.service", "gemini")!!; set(v) = p.edit().putString("cloud.service", v).apply()
     var cloudBase: String get() = p.getString("cloud.base", "")!!; set(v) = p.edit().putString("cloud.base", v).apply()
     var cloudKey: String get() = p.getString("cloud.key", "")!!; set(v) = p.edit().putString("cloud.key", v).apply()
+    var cloudKeys: String get() = p.getString("cloud.keys", "")!!; set(v) = p.edit().putString("cloud.keys", v).apply()   // набор ключей (JSON как импортирован)
     var cloudModel: String get() = p.getString("cloud.model", "")!!; set(v) = p.edit().putString("cloud.model", v).apply()
     var serverModel: String get() = p.getString("srv.model", "")!!; set(v) = p.edit().putString("srv.model", v).apply()
 

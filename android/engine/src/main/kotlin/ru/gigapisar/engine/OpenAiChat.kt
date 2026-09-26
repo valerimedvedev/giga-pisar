@@ -44,9 +44,10 @@ object OpenAiChat {
     /** Ответ нейронки на сообщения. Думать вслух запрещаем (enable_thinking=false). */
     fun chat(base: String, messages: List<ChatMessage>, key: String = "", model: String = "",
              temperature: Double = 0.3, maxTokens: Int = 2048, timeoutMs: Int = 120_000,
-             llamaExtras: Boolean = true): String {
+             llamaExtras: Boolean = true, extras: Map<String, Any> = emptyMap()): String {
         val body = JSONObject().apply {
             if (model.isNotBlank()) put("model", model)
+            for ((k, v) in extras) put(k, v)
             put("messages", JSONArray().apply { messages.forEach { put(JSONObject().put("role", it.role).put("content", it.content)) } })
             put("temperature", temperature)
             put("max_tokens", maxTokens)
@@ -63,7 +64,8 @@ object OpenAiChat {
             if (code == 429) throw IOException("слишком много запросов подряд, подождите минуту")
             if (code == 401 || code == 403) throw NeedsKey()
             if (code != 200) {
-                val err = runCatching { JSONObject(c.errorStream?.bufferedReader()?.readText() ?: "").optJSONObject("error")?.optString("message") }.getOrNull()
+                val raw = (c.errorStream?.bufferedReader()?.readText() ?: "").trim().removePrefix("[").trimEnd(']', ' ', '\n')   // Gemini заворачивает ошибку в массив
+                val err = runCatching { JSONObject(raw).optJSONObject("error")?.optString("message") }.getOrNull()
                 throw IOException(if (err.isNullOrBlank()) "сервер ответил $code" else "сервер ответил $code: ${err.take(200)}")
             }
             val j = JSONObject(c.inputStream.bufferedReader().readText())

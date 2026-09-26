@@ -130,3 +130,9 @@ Google Gemini, GroqCloud, OpenRouter, Mistral, Hugging Face, Cloudflare Workers 
 страниц); Mistral, Hugging Face и Cloudflare подключаются через сервер сайта
 (плагин WordPress, вкладка «Мозг» → «Серверный мозг») или через GigaBrain.
 Ключ хранится в браузере человека (localStorage `giga.cloud`), текст уходит в сервис.
+
+**Набор ключей.** Страница `keys.html` (на сайте — `/pisar/keys.html`) собирает
+файл `giga-keys.json` со всеми ключами; он импортируется в приложение Android
+(Настройки → Мозг → Облачный сервис → «Импорт»/«Файл…»), на страницу и в Word
+(«Импорт набора» в форме облачного сервиса) и в плагин (вкладка «Мозг» → «Набор
+ключей»). Файл личный: `giga-keys*.json` в .gitignore.

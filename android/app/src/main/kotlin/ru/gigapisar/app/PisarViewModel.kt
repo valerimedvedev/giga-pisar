@@ -431,7 +431,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
                 if (base.isBlank() || "ACCOUNT_ID" in base) throw IOException("не задан адрес сервиса: Настройки → Мозг → Облачный сервис")
                 if (s.cloudKey.isBlank()) throw IOException("нет ключа API: Настройки → Мозг → Облачный сервис")
                 status(label)
-                OpenAiChat.chat(base, messages, s.cloudKey, s.cloudModel.ifBlank { svc?.model ?: "" }, maxTokens = maxTokens, llamaExtras = false)
+                OpenAiChat.chat(base, messages, s.cloudKey, s.cloudModel.ifBlank { svc?.model ?: "" }, maxTokens = maxTokens, llamaExtras = false, extras = svc?.extras ?: emptyMap())
             }
             else -> throw IOException("мозг выключен: Настройки → Мозг")
         }.ifBlank { throw IOException("нейронка ничего не ответила") }
@@ -524,6 +524,23 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         if (old.asrThreads != s.asrThreads) { rnnt?.close(); rnnt = null }
         if (old.llmThreads != s.llmThreads || (old.phoneModel != s.phoneModel)) LocalLlm.unload()
         if (s.brainMode != "phone") LocalLlm.unload()     // освободить память телефона
+    }
+
+    /** Импорт набора ключей giga-keys.json: запоминает все, включает сервис по умолчанию. */
+    fun importKeys(json: String): String {
+        val (keys, def) = ru.gigapisar.engine.Cloud.parseKeys(json)
+        store.cloudKeys = json
+        val id = def?.takeIf { it in keys } ?: settings.cloudService.takeIf { it in keys } ?: keys.keys.first()
+        applyCloudService(id, keys)
+        return "Ключи: ${keys.keys.joinToString()} — включён ${ru.gigapisar.engine.Cloud.byId(id)?.name ?: id}"
+    }
+
+    /** Выбор сервиса: адрес и модель из пресета, ключ и аккаунт — из набора, если есть. */
+    fun applyCloudService(id: String, keys: Map<String, ru.gigapisar.engine.Cloud.KeyEntry>? = null) {
+        val svc = ru.gigapisar.engine.Cloud.byId(id) ?: return
+        val set = keys ?: runCatching { ru.gigapisar.engine.Cloud.parseKeys(store.cloudKeys).first }.getOrDefault(emptyMap())
+        val e = set[id]
+        save(settings.copy(brainMode = "cloud", cloudService = id, cloudBase = ru.gigapisar.engine.Cloud.baseFor(svc, e), cloudModel = svc.model, cloudKey = e?.key ?: ""))
     }
 
     fun resetChips() = save(settings.copy(chips = Brain.DEFAULT_CHIPS))

@@ -10,13 +10,15 @@ data class CloudService(
     val keyUrl: String, val note: String,
     val listsModels: Boolean = true,      // умеет GET /v1/models
     val browser: Boolean = true,          // пускает запросы прямо из браузера (CORS)
+    val extras: Map<String, Any> = emptyMap(),   // особые поля запроса этого сервиса
 )
 
 object Cloud {
     val SERVICES = listOf(
-        CloudService("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash",
+        CloudService("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-flash-latest",
             "https://aistudio.google.com/apikey",
-            "бесплатный тариф с лимитами по модели; Google может использовать данные бесплатного тарифа для улучшения продуктов — не отправляйте конфиденциальное"),
+            "бесплатный тариф с лимитами по модели; Google может использовать данные бесплатного тарифа для улучшения продуктов — не отправляйте конфиденциальное",
+            extras = mapOf("reasoning_effort" to "low")),   // модель «думает» — иначе съедает лимит ответа
         CloudService("groq", "GroqCloud", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile",
             "https://console.groq.com/keys",
             "очень быстрые ответы; бесплатный план с квотами по моделям (Llama, GPT-OSS, Qwen)"),
@@ -35,4 +37,30 @@ object Cloud {
     )
 
     fun byId(id: String) = SERVICES.firstOrNull { it.id == id }
+
+    /** Одна запись набора ключей: ключ и, если нужно (Cloudflare), идентификатор аккаунта. */
+    data class KeyEntry(val key: String, val account: String = "")
+
+    /**
+     * Набор ключей — файл giga-keys.json (делается страницей web/keys.html):
+     * {"format":"giga-pisar-keys/1","default":"groq","services":{"groq":{"key":"…"},"cloudflare":{"key":"…","account":"…"}}}
+     * Понимает и упрощённый вид {"groq":"ключ", …}. Возвращает сервис → запись; неизвестные сервисы пропускает.
+     */
+    fun parseKeys(json: String): Pair<Map<String, KeyEntry>, String?> {
+        val root = org.json.JSONObject(json.trim())
+        val services = root.optJSONObject("services") ?: root
+        val out = LinkedHashMap<String, KeyEntry>()
+        for (id in SERVICES.map { it.id }) {
+            val v = services.opt(id) ?: continue
+            when (v) {
+                is String -> if (v.isNotBlank()) out[id] = KeyEntry(v.trim())
+                is org.json.JSONObject -> { val k = v.optString("key").trim(); if (k.isNotEmpty()) out[id] = KeyEntry(k, v.optString("account").trim()) }
+            }
+        }
+        if (out.isEmpty()) throw IllegalArgumentException("в файле нет ни одного известного сервиса")
+        return out to root.optString("default").ifBlank { null }
+    }
+
+    /** Адрес сервиса с подставленным аккаунтом (Cloudflare). */
+    fun baseFor(svc: CloudService, entry: KeyEntry?) = svc.base.replace("ACCOUNT_ID", entry?.account?.ifBlank { "ACCOUNT_ID" } ?: "ACCOUNT_ID")
 }

@@ -133,10 +133,25 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
 
             if (s.brainMode == "cloud") Section("Облачный сервис") {
                 Text("Нужен свой ключ API (бесплатный). Текст уходит в сервис — читайте его условия. Ответы обычно за 1–3 с.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                var keysText by remember { mutableStateOf("") }
+                var keysMsg by remember { mutableStateOf("") }
+                val ctxKeys = androidx.compose.ui.platform.LocalContext.current
+                val pickKeys = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                    uri?.let { u -> keysMsg = runCatching { vm.importKeys(ctxKeys.contentResolver.openInputStream(u)!!.bufferedReader().readText()) }.getOrElse { "Не разобрал: ${it.message}" } }
+                }
+                Text("Набор ключей", style = MaterialTheme.typography.titleSmall)
+                Text("Файл giga-keys.json (делается страницей keys.html) или вставьте его текст — ключи всех сервисов запомнятся, переключение сервиса подставит нужный.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(keysText, { keysText = it }, Modifier.fillMaxWidth(), label = { Text("Вставить JSON с ключами") }, minLines = 2, maxLines = 4)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { keysMsg = runCatching { vm.importKeys(keysText) }.getOrElse { "Не разобрал: ${it.message}" }; if (!keysMsg.startsWith("Не")) keysText = "" }, enabled = keysText.isNotBlank()) { Text("Импорт") }
+                    OutlinedButton(onClick = { pickKeys.launch(arrayOf("application/json", "text/*", "*/*")) }) { Text("Файл…") }
+                }
+                if (keysMsg.isNotEmpty()) Text(keysMsg, style = MaterialTheme.typography.bodySmall)
+                val stored = remember(vm.store.cloudKeys) { runCatching { ru.gigapisar.engine.Cloud.parseKeys(vm.store.cloudKeys).first.keys }.getOrDefault(emptySet()) }
                 for (c in ru.gigapisar.engine.Cloud.SERVICES) Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = s.cloudService == c.id, onClick = { vm.save(s.copy(cloudService = c.id, cloudBase = c.base, cloudModel = c.model)) })
+                    RadioButton(selected = s.cloudService == c.id, onClick = { vm.applyCloudService(c.id) })
                     Column(Modifier.weight(1f)) {
-                        Text(c.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(c.name + if (c.id in stored) "  🔑" else "", style = MaterialTheme.typography.bodyMedium)
                         Text(c.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -233,7 +248,7 @@ private fun RemoteForm(vm: PisarViewModel, base0: String, key0: String, model0: 
         Button(onClick = {
             result = "Проверяю…"
             vm.checkRemote(base, key) { r ->
-                r.onSuccess { list -> result = if (list.isEmpty()) "Отвечает, но моделей нет" else "Отвечает. Модели: ${list.joinToString()}"; if (model.isBlank() || model !in list) model = list.firstOrNull() ?: model; onSave(base, key, model) }
+                r.onSuccess { list -> result = if (list.isEmpty()) "Отвечает, но моделей нет" else "Отвечает. Модели: ${list.joinToString()}"; if (model.isBlank() || list.none { it == model || it.endsWith("/$model") }) model = list.firstOrNull() ?: model; onSave(base, key, model) }
                     .onFailure { result = "Не отвечает: ${it.message}" }
             }
         }, enabled = base.isNotBlank()) { Text("Проверить и сохранить") }

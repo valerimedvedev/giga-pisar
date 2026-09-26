@@ -31,3 +31,6 @@ android/local.properties
 android/.idea/
 android/.kotlin/
 android/app/.cxx/
+
+# личные наборы ключей облачных сервисов — никогда не коммитить
+giga-keys*.json

@@ -118,12 +118,12 @@ function giga_pisar_settings_page() {
 					<?php $services = giga_pisar_cloud_services(); ?>
 					<select id="gp-service" name="<?php echo esc_attr( $name( 'gigachat_service' ) ); ?>">
 						<?php foreach ( $services as $id => $svc ) : ?>
-							<option value="<?php echo esc_attr( $id ); ?>" data-base="<?php echo esc_attr( $svc['base'] ); ?>" data-model="<?php echo esc_attr( $svc['model'] ); ?>" data-key="<?php echo esc_attr( $svc['key'] ); ?>" data-note="<?php echo esc_attr( $svc['note'] ); ?>" <?php selected( $o['gigachat_service'], $id ); ?>><?php echo esc_html( $svc['name'] ); ?></option>
+							<option value="<?php echo esc_attr( $id ); ?>" data-base="<?php echo esc_attr( str_replace( 'ACCOUNT_ID', $o['cloud_keys'][ $id ]['account'] ?? 'ACCOUNT_ID', $svc['base'] ) ); ?>" data-haskey="<?php echo isset( $o['cloud_keys'][ $id ] ) ? '1' : ''; ?>" data-model="<?php echo esc_attr( $svc['model'] ); ?>" data-key="<?php echo esc_attr( $svc['key'] ); ?>" data-note="<?php echo esc_attr( $svc['note'] ); ?>" <?php selected( $o['gigachat_service'], $id ); ?>><?php echo esc_html( $svc['name'] ); ?></option>
 						<?php endforeach; ?>
 					</select>
 					<p class="description" id="gp-service-note"><?php echo esc_html( $services[ $o['gigachat_service'] ]['note'] ?? '' ); ?> <a id="gp-service-key" href="<?php echo esc_url( $services[ $o['gigachat_service'] ]['key'] ?? '#' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'получить ключ', 'giga-pisar' ); ?></a></p>
 					<script>
-					(function(){var s=document.getElementById('gp-service');if(!s)return;s.addEventListener('change',function(){var o=s.options[s.selectedIndex];document.getElementById('gp-gigachat').value=o.dataset.base||'';document.getElementById('gp-model').value=o.dataset.model||'';document.getElementById('gp-service-note').firstChild.textContent=(o.dataset.note||'')+' ';var a=document.getElementById('gp-service-key');a.href=o.dataset.key||'#';a.style.display=o.dataset.key?'':'none';});})();
+					(function(){var s=document.getElementById('gp-service');if(!s)return;s.addEventListener('change',function(){var o=s.options[s.selectedIndex];document.getElementById('gp-gigachat').value=o.dataset.base||'';document.getElementById('gp-model').value=o.dataset.model||'';var k=document.getElementById('gp-key');if(k){k.value='';k.placeholder=o.dataset.haskey?'ключ из набора подставится при сохранении':'';}document.getElementById('gp-service-note').firstChild.textContent=(o.dataset.note||'')+' ';var a=document.getElementById('gp-service-key');a.href=o.dataset.key||'#';a.style.display=o.dataset.key?'':'none';});})();
 					</script>
 				</td></tr>
 				<tr><th scope="row"><label for="gp-gigachat"><?php esc_html_e( 'Адрес', 'giga-pisar' ); ?></label></th><td>
@@ -134,12 +134,18 @@ function giga_pisar_settings_page() {
 					<?php endif; ?>
 					<p class="description"><?php esc_html_e( 'OpenAI-совместимый адрес: llama-server с GigaChat3.1 (см. web/deploy в репозитории) или адрес облачного сервиса из списка выше. Браузеры к нему не ходят — запросы идут через WordPress с проверкой прав и лимитом 12 правок в минуту на человека.', 'giga-pisar' ); ?></p>
 				</td></tr>
+				<tr><th scope="row"><label for="gp-keys"><?php esc_html_e( 'Набор ключей', 'giga-pisar' ); ?></label></th><td>
+					<textarea id="gp-keys" class="large-text code" rows="3" name="<?php echo esc_attr( $name( 'cloud_keys_import' ) ); ?>" placeholder='{"format":"giga-pisar-keys/1","default":"groq","services":{"groq":{"key":"…"}}}'></textarea>
+					<?php $stored = array_keys( (array) $o['cloud_keys'] ); ?>
+					<p class="description"><?php esc_html_e( 'Вставьте содержимое giga-keys.json (его делает страница keys.html рядом с пробной страницей) и сохраните: ключи всех сервисов запомнятся, при выборе сервиса ключ подставится сам.', 'giga-pisar' ); ?>
+					<?php if ( $stored ) : ?><br><?php esc_html_e( 'Сохранённые ключи:', 'giga-pisar' ); ?> <strong><?php echo esc_html( implode( ', ', $stored ) ); ?></strong><?php endif; ?></p>
+				</td></tr>
 				<tr><th scope="row"><label for="gp-key"><?php esc_html_e( 'Ключ API', 'giga-pisar' ); ?></label></th><td>
 					<input id="gp-key" class="regular-text code" type="password" autocomplete="off" name="<?php echo esc_attr( $name( 'gigachat_key' ) ); ?>" value="<?php echo esc_attr( $o['gigachat_key'] ); ?>">
 					<p class="description"><?php esc_html_e( 'Для облачных сервисов. Хранится в настройках WordPress, в браузеры посетителей не попадает. Своему llama-server ключ не нужен.', 'giga-pisar' ); ?></p>
 				</td></tr>
 				<tr><th scope="row"><label for="gp-model"><?php esc_html_e( 'Модель', 'giga-pisar' ); ?></label></th><td>
-					<input id="gp-model" class="regular-text code" type="text" name="<?php echo esc_attr( $name( 'gigachat_model' ) ); ?>" value="<?php echo esc_attr( $o['gigachat_model'] ); ?>" placeholder="gemini-2.5-flash">
+					<input id="gp-model" class="regular-text code" type="text" name="<?php echo esc_attr( $name( 'gigachat_model' ) ); ?>" value="<?php echo esc_attr( $o['gigachat_model'] ); ?>" placeholder="gemini-flash-latest">
 					<p class="description"><?php esc_html_e( 'Имя модели у сервиса; подставляется из списка, можно вписать другое. Для llama-server можно оставить пустым.', 'giga-pisar' ); ?></p>
 				</td></tr>
 				<tr><th scope="row"><?php esc_html_e( 'Кому доступен мозг', 'giga-pisar' ); ?></th><td>

@@ -46,7 +46,7 @@ say "1/5 Страница → $DEST"
 [ -f "$WEB_SRC/vendor/ort/ort.wasm.min.mjs" ] && [ -f "$WEB_SRC/vendor/wllama/index.js" ] \
     || bash "$WEB_SRC/fetch-vendor.sh"
 mkdir -p "$DEST"
-cp -r "$WEB_SRC/index.html" "$WEB_SRC/app.js" "$WEB_SRC/app.css" "$WEB_SRC/giga" "$WEB_SRC/vendor" "$WEB_SRC/word" "$DEST/"
+cp -r "$WEB_SRC/index.html" "$WEB_SRC/app.js" "$WEB_SRC/app.css" "$WEB_SRC/giga" "$WEB_SRC/vendor" "$WEB_SRC/word" "$WEB_SRC/keys.html" "$DEST/"
 chmod -R a+rX "$DEST"
 
 say "2/5 Модель распознавания GigaAM (213 МБ)"

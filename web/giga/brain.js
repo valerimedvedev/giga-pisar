@@ -14,8 +14,8 @@
 //
 // Выбор модели и адрес местного мозга запоминаются в localStorage.
 
-import { CLOUD_SERVICES, cloudService } from "./cloud.js";
-export { CLOUD_SERVICES, cloudService };
+import { CLOUD_SERVICES, cloudService, parseKeys, baseFor, storedKeys } from "./cloud.js";
+export { CLOUD_SERVICES, cloudService, parseKeys, baseFor, storedKeys };
 
 const ru = (navigator.language || "ru").toLowerCase().startsWith("ru");
 const L = (r, e) => (ru ? r : e);
@@ -514,7 +514,7 @@ export class Brain extends EventTarget {
           : L("облачный сервис не отвечает", "the cloud service does not answer"));
       }
       onStage(actionLabel(command));
-      out = await this.chatOpenAI(this.cloudBase, messages, { key: this.cloud.key, model: this.cloudModel, llamaExtras: false });
+      out = await this.chatOpenAI(this.cloudBase, messages, { key: this.cloud.key, model: this.cloudModel, llamaExtras: false, extras: cloudService(this.cloud.service)?.extras });
     } else if (this.chosenId === "gigachat") {
       onStage(actionLabel(command));
       out = this.serverChatFn ? await this.serverChatFn(body, command, mode) : await this.chatServer(messages);
@@ -543,7 +543,7 @@ export class Brain extends EventTarget {
   }
 
   /** Запрос к любому OpenAI-совместимому серверу (llama-server, Ollama, LM Studio). */
-  async chatOpenAI(base, messages, { key = "", model = "", llamaExtras = true } = {}) {
+  async chatOpenAI(base, messages, { key = "", model = "", llamaExtras = true, extras = null } = {}) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
@@ -552,6 +552,7 @@ export class Brain extends EventTarget {
         headers: { "Content-Type": "application/json", ...authHeaders(key) },
         body: JSON.stringify({
           ...(model ? { model } : {}),
+          ...(extras || {}),
           messages, temperature: 0.3, max_tokens: 2048, stream: false,
           // поле llama.cpp; облачные сервисы незнакомые поля отвергают
           ...(llamaExtras ? { chat_template_kwargs: { enable_thinking: false } } : {}),
@@ -592,9 +593,10 @@ export function cloudForm(brain, rerender) {
   const fill = () => {
     const svc = cloudService(select.value) || CLOUD_SERVICES[0];
     const same = svc.id === brain.cloud.service;
-    base.value = same ? (brain.cloud.base || svc.base) : svc.base;
+    const entry = storedKeys()[svc.id];          // из набора ключей, если импортирован
+    base.value = same ? (brain.cloud.base || baseFor(svc, entry)) : baseFor(svc, entry);
     model.value = same ? (brain.cloud.model || svc.model) : svc.model;
-    key.value = same ? (brain.cloud.key || "") : "";
+    key.value = same ? (brain.cloud.key || entry?.key || "") : (entry?.key || "");
     note.textContent = svc.note;
     link.href = svc.keyUrl; link.textContent = "получить ключ: " + svc.keyUrl.replace("https://", "");
   };
@@ -608,6 +610,31 @@ export function cloudForm(brain, rerender) {
     rerender?.();
     await brain.checkCloud();
   });
-  form.append(select, note, link, base, key, model, check);
+  // набор ключей giga-keys.json: вставить текст или выбрать файл — ключи всех сервисов запомнятся
+  const keysBox = document.createElement("textarea");
+  keysBox.rows = 2; keysBox.placeholder = "Набор ключей: вставьте содержимое giga-keys.json (страница keys.html делает его)"; keysBox.spellcheck = false;
+  const keysRow = document.createElement("div");
+  keysRow.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+  const importBtn = document.createElement("button"); importBtn.type = "button"; importBtn.textContent = "Импорт набора";
+  const fileLabel = document.createElement("label"); fileLabel.className = "button"; fileLabel.textContent = "Файл…";
+  const fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.accept = ".json,application/json"; fileInput.hidden = true;
+  fileLabel.append(fileInput);
+  const keysMsg = document.createElement("span"); keysMsg.className = "hint";
+  const importText = (text) => {
+    try {
+      const { keys, default: def } = parseKeys(text);
+      localStorage.setItem("giga.cloudKeys", JSON.stringify({ format: "giga-pisar-keys/1", default: def, services: keys }));
+      const id = def || (keys[select.value] ? select.value : Object.keys(keys)[0]);
+      const svc = cloudService(id);
+      brain.setCloud({ service: id, base: baseFor(svc, keys[id]), key: keys[id].key, model: svc.model });
+      select.value = id; fill();
+      keysMsg.textContent = `Ключи: ${Object.keys(keys).join(", ")} — включён ${svc.name}`;
+      keysBox.value = "";
+    } catch (e) { keysMsg.textContent = "Не разобрал: " + e.message; }
+  };
+  importBtn.addEventListener("click", () => keysBox.value.trim() && importText(keysBox.value));
+  fileInput.addEventListener("change", () => { const f = fileInput.files?.[0]; if (f) f.text().then(importText); fileInput.value = ""; });
+  keysRow.append(importBtn, fileLabel, keysMsg);
+  form.append(select, note, link, base, key, model, check, keysBox, keysRow);
   return form;
 }

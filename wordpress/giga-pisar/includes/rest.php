@@ -118,6 +118,8 @@ function giga_pisar_rest_brain( WP_REST_Request $req ) {
 	}
 	if ( 'llama' === $svc || ! $svc ) {
 		$payload['chat_template_kwargs'] = array( 'enable_thinking' => false ); // поле llama.cpp; облака его отвергают
+	} else {
+		$payload = array_merge( $payload, giga_pisar_cloud_services()[ $svc ]['extras'] ?? array() ); // например, reasoning_effort у Gemini
 	}
 	$r = wp_remote_post(
 		giga_pisar_opt( 'gigachat_url' ) . 'v1/chat/completions',
@@ -132,6 +134,9 @@ function giga_pisar_rest_brain( WP_REST_Request $req ) {
 	}
 	$code = (int) wp_remote_retrieve_response_code( $r );
 	$json = json_decode( wp_remote_retrieve_body( $r ), true );
+	if ( isset( $json[0] ) && is_array( $json[0] ) ) {
+		$json = $json[0]; // Gemini заворачивает ошибку в массив
+	}
 	$text = $json['choices'][0]['message']['content'] ?? '';
 	// если модель подумала вслух — оставляем только ответ
 	$pos = strpos( $text, '</think>' );

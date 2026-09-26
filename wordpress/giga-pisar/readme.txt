@@ -40,6 +40,7 @@ License: MIT
 == Changelog ==
 
 = 1.4.0 =
+* Набор ключей giga-keys.json (страница keys.html): вставить на вкладке «Мозг» — ключи всех сервисов запомнятся.
 * Серверный мозг: кроме своего llama-server с GigaChat — облачные сервисы с бесплатным тарифом (Google Gemini, GroqCloud, OpenRouter, Mistral, Hugging Face, Cloudflare Workers AI). Выбор в списке на вкладке «Мозг», ключ API хранится на сервере, браузеры ходят только к WordPress.
 
 = 1.3.1 =

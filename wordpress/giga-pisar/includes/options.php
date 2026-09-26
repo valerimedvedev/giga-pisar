@@ -23,6 +23,7 @@ function giga_pisar_defaults() {
 		'gigachat_key'   => '',         // ключ API (облачные сервисы; хранится только на сервере)
 		'gigachat_model' => '',         // имя модели (у облачных сервисов обязательно)
 		'gigachat_service' => 'llama',  // llama | gemini | groq | openrouter | mistral | huggingface | cloudflare
+		'cloud_keys'     => array(),    // набор ключей из giga-keys.json: сервис => array( key, account )
 		'model_url'      => '',         // свой адрес архива GigaAM
 		'qwen_url'       => '',         // свой адрес Qwen .gguf
 		'isolation'      => 0,          // заголовки COOP/COEP — многопоточность
@@ -172,10 +173,38 @@ function giga_pisar_sanitize_options( $in ) {
 	if ( isset( $in['gigachat_service'] ) ) {
 		$out['gigachat_service'] = array_key_exists( $in['gigachat_service'], giga_pisar_cloud_services() ) ? $in['gigachat_service'] : 'llama';
 	}
+	// набор ключей giga-keys.json, вставленный в поле импорта: разбираем и запоминаем все
+	if ( ! empty( $in['cloud_keys_import'] ) ) {
+		$parsed = giga_pisar_parse_keys( (string) $in['cloud_keys_import'] );
+		if ( $parsed ) {
+			$out['cloud_keys'] = array_merge( is_array( $out['cloud_keys'] ?? null ) ? $out['cloud_keys'] : array(), $parsed['keys'] );
+			if ( $parsed['default'] ) {
+				$out['gigachat_service'] = $parsed['default'];
+				$out['brain_provider']   = 'gigachat';
+			}
+		} else {
+			add_settings_error( 'giga_pisar', 'keys', __( 'Набор ключей не разобрался: нужен JSON из keys.html.', 'giga-pisar' ) );
+		}
+	}
 	foreach ( array( 'gigachat_url', 'model_url', 'qwen_url' ) as $k ) {
 		if ( isset( $in[ $k ] ) ) {
 			$url       = esc_url_raw( trim( $in[ $k ] ), array( 'http', 'https' ) );
 			$out[ $k ] = ( 'gigachat_url' === $k && $url ) ? trailingslashit( $url ) : $url;
+		}
+	}
+	// выбран облачный сервис — ключ, адрес и модель из пресета и набора, если поля пусты или сервис сменился
+	$svc = $out['gigachat_service'] ?? 'llama';
+	if ( 'llama' !== $svc ) {
+		$all   = giga_pisar_cloud_services();
+		$entry = $out['cloud_keys'][ $svc ] ?? null;
+		if ( empty( $out['gigachat_key'] ) && $entry ) {
+			$out['gigachat_key'] = $entry['key'];
+		}
+		if ( empty( $out['gigachat_url'] ) || ( $svc !== ( $d['gigachat_service'] ?? '' ) && false === strpos( (string) $out['gigachat_url'], wp_parse_url( $all[ $svc ]['base'], PHP_URL_HOST ) ) ) ) {
+			$out['gigachat_url'] = str_replace( 'ACCOUNT_ID', $entry['account'] ?? 'ACCOUNT_ID', $all[ $svc ]['base'] );
+		}
+		if ( empty( $out['gigachat_model'] ) ) {
+			$out['gigachat_model'] = $all[ $svc ]['model'];
 		}
 	}
 	return $out;
@@ -210,13 +239,42 @@ function giga_pisar_can_brain() {
 function giga_pisar_cloud_services() {
 	return array(
 		'llama'       => array( 'name' => 'llama-server (GigaChat на своём сервере)', 'base' => 'http://127.0.0.1:8091/', 'model' => '', 'key' => '', 'note' => __( 'своя нейронка на сервере сайта, ключ не нужен', 'giga-pisar' ) ),
-		'gemini'      => array( 'name' => 'Google Gemini', 'base' => 'https://generativelanguage.googleapis.com/v1beta/openai/', 'model' => 'gemini-2.5-flash', 'key' => 'https://aistudio.google.com/apikey', 'note' => __( 'бесплатный тариф с лимитами; Google может использовать данные бесплатного тарифа для улучшения продуктов', 'giga-pisar' ) ),
+		'gemini'      => array( 'name' => 'Google Gemini', 'base' => 'https://generativelanguage.googleapis.com/v1beta/openai/', 'model' => 'gemini-flash-latest', 'key' => 'https://aistudio.google.com/apikey', 'note' => __( 'бесплатный тариф с лимитами; Google может использовать данные бесплатного тарифа для улучшения продуктов', 'giga-pisar' ), 'extras' => array( 'reasoning_effort' => 'low' ) ),
 		'groq'        => array( 'name' => 'GroqCloud', 'base' => 'https://api.groq.com/openai/v1/', 'model' => 'llama-3.3-70b-versatile', 'key' => 'https://console.groq.com/keys', 'note' => __( 'очень быстрые ответы; квоты по моделям', 'giga-pisar' ) ),
 		'openrouter'  => array( 'name' => 'OpenRouter', 'base' => 'https://openrouter.ai/api/v1/', 'model' => 'google/gemma-3-27b-it:free', 'key' => 'https://openrouter.ai/keys', 'note' => __( 'бесплатные модели :free; без кредитов — 50 запросов в день', 'giga-pisar' ) ),
 		'mistral'     => array( 'name' => 'Mistral', 'base' => 'https://api.mistral.ai/v1/', 'model' => 'mistral-small-latest', 'key' => 'https://console.mistral.ai/api-keys', 'note' => __( 'режим Free без карты, месячный объём в панели', 'giga-pisar' ) ),
 		'huggingface' => array( 'name' => 'Hugging Face', 'base' => 'https://router.huggingface.co/v1/', 'model' => 'Qwen/Qwen2.5-72B-Instruct', 'key' => 'https://huggingface.co/settings/tokens', 'note' => __( 'около $0,10 в месяц бесплатно — только проверить', 'giga-pisar' ) ),
 		'cloudflare'  => array( 'name' => 'Cloudflare Workers AI', 'base' => 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1/', 'model' => '@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'key' => 'https://dash.cloudflare.com/profile/api-tokens', 'note' => __( '10 000 нейронов в день; в адресе замените ACCOUNT_ID', 'giga-pisar' ) ),
 	);
+}
+
+/**
+ * Разбор giga-keys.json: {"format":"giga-pisar-keys/1","default":"groq","services":{"groq":{"key":"…"},"cloudflare":{"key":"…","account":"…"}}}
+ * (или упрощённо {"groq":"ключ"}). Возвращает array( keys => сервис => [key, account], default ) либо null.
+ */
+function giga_pisar_parse_keys( $text ) {
+	$root = json_decode( trim( $text ), true );
+	if ( ! is_array( $root ) ) {
+		return null;
+	}
+	$src  = isset( $root['services'] ) && is_array( $root['services'] ) ? $root['services'] : $root;
+	$keys = array();
+	foreach ( array_keys( giga_pisar_cloud_services() ) as $id ) {
+		if ( 'llama' === $id || ! isset( $src[ $id ] ) ) {
+			continue;
+		}
+		$v = $src[ $id ];
+		if ( is_string( $v ) && trim( $v ) ) {
+			$keys[ $id ] = array( 'key' => mb_substr( trim( $v ), 0, 300 ), 'account' => '' );
+		} elseif ( is_array( $v ) && ! empty( $v['key'] ) ) {
+			$keys[ $id ] = array( 'key' => mb_substr( trim( (string) $v['key'] ), 0, 300 ), 'account' => mb_substr( trim( (string) ( $v['account'] ?? '' ) ), 0, 100 ) );
+		}
+	}
+	if ( ! $keys ) {
+		return null;
+	}
+	$def = isset( $root['default'] ) && isset( $keys[ $root['default'] ] ) ? $root['default'] : null;
+	return array( 'keys' => $keys, 'default' => $def );
 }
 
 /** Как называть серверный мозг в интерфейсе. */
