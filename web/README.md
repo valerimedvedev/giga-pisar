@@ -120,3 +120,13 @@ python scripts/сверка-web.py <папка-модели> запись.wav [�
 
 Скрипт гоняет браузерное ядро в Node (тот же onnxruntime-web) и сравнивает
 его текст с `server/giga_core.py`. Записи — 16 кГц, моно, 16 бит.
+
+## Облачные сервисы с бесплатным тарифом
+
+В окне «⚙ Мозг» (страница и надстройка Word) есть вариант **«Облачный сервис»**:
+Google Gemini, GroqCloud, OpenRouter, Mistral, Hugging Face, Cloudflare Workers AI.
+Пресеты (адрес, модель, ссылка на получение ключа, условия) — в `giga/cloud.js`.
+Прямо из браузера работают Gemini, Groq и OpenRouter (они разрешают запросы со
+страниц); Mistral, Hugging Face и Cloudflare подключаются через сервер сайта
+(плагин WordPress, вкладка «Мозг» → «Серверный мозг») или через GigaBrain.
+Ключ хранится в браузере человека (localStorage `giga.cloud`), текст уходит в сервис.

@@ -43,14 +43,16 @@ object OpenAiChat {
 
     /** Ответ нейронки на сообщения. Думать вслух запрещаем (enable_thinking=false). */
     fun chat(base: String, messages: List<ChatMessage>, key: String = "", model: String = "",
-             temperature: Double = 0.3, maxTokens: Int = 2048, timeoutMs: Int = 120_000): String {
+             temperature: Double = 0.3, maxTokens: Int = 2048, timeoutMs: Int = 120_000,
+             llamaExtras: Boolean = true): String {
         val body = JSONObject().apply {
             if (model.isNotBlank()) put("model", model)
             put("messages", JSONArray().apply { messages.forEach { put(JSONObject().put("role", it.role).put("content", it.content)) } })
             put("temperature", temperature)
             put("max_tokens", maxTokens)
             put("stream", false)
-            put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+            // поле llama.cpp; облачные сервисы незнакомые поля отвергают
+            if (llamaExtras) put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
         }.toString()
         val c = open(normBase(base) + "/v1/chat/completions", key, "POST", timeoutMs)
         try {
@@ -60,7 +62,10 @@ object OpenAiChat {
             val code = c.responseCode
             if (code == 429) throw IOException("слишком много запросов подряд, подождите минуту")
             if (code == 401 || code == 403) throw NeedsKey()
-            if (code != 200) throw IOException("сервер ответил $code")
+            if (code != 200) {
+                val err = runCatching { JSONObject(c.errorStream?.bufferedReader()?.readText() ?: "").optJSONObject("error")?.optString("message") }.getOrNull()
+                throw IOException(if (err.isNullOrBlank()) "сервер ответил $code" else "сервер ответил $code: ${err.take(200)}")
+            }
             val j = JSONObject(c.inputStream.bufferedReader().readText())
             val text = j.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content") ?: ""
             return Brain.stripThinking(text).trim()

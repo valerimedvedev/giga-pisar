@@ -46,7 +46,17 @@ function giga_pisar_rest_brain_allowed() {
 	return giga_pisar_can_brain() && 'gigachat' === giga_pisar_opt( 'brain_provider' );
 }
 
-/** Проверка llama-server; ответ кешируется на 30 секунд. */
+/** Заголовки к серверному мозгу: ключ API, если задан. */
+function giga_pisar_upstream_headers() {
+	$h   = array( 'Content-Type' => 'application/json' );
+	$key = giga_pisar_opt( 'gigachat_key' );
+	if ( $key ) {
+		$h['Authorization'] = 'Bearer ' . $key;
+	}
+	return $h;
+}
+
+/** Проверка серверного мозга; ответ кешируется на 30 секунд. */
 function giga_pisar_rest_health() {
 	return array( 'status' => giga_pisar_gigachat_health() );
 }
@@ -56,7 +66,15 @@ function giga_pisar_gigachat_health( $fresh = false ) {
 	if ( ! $fresh && false !== $cached ) {
 		return $cached;
 	}
-	$r = wp_remote_get( giga_pisar_opt( 'gigachat_url' ) . 'health', array( 'timeout' => 5 ) );
+	$svc = giga_pisar_opt( 'gigachat_service' );
+	if ( 'llama' === $svc || ! $svc ) {
+		$r = wp_remote_get( giga_pisar_opt( 'gigachat_url' ) . 'health', array( 'timeout' => 5 ) );
+	} elseif ( 'cloudflare' === $svc ) {
+		// списка моделей нет — считаем живым, если ключ задан
+		$r = giga_pisar_opt( 'gigachat_key' ) ? array( 'response' => array( 'code' => 200 ) ) : new WP_Error( 'nokey', 'nokey' );
+	} else {
+		$r = wp_remote_get( giga_pisar_opt( 'gigachat_url' ) . 'v1/models', array( 'timeout' => 8, 'headers' => giga_pisar_upstream_headers() ) );
+	}
 	$code   = is_wp_error( $r ) ? 0 : (int) wp_remote_retrieve_response_code( $r );
 	$status = 200 === $code ? 'ok' : ( 503 === $code ? 'loading' : 'absent' );
 	set_transient( 'giga_pisar_health', $status, 30 );
@@ -86,25 +104,31 @@ function giga_pisar_rest_brain( WP_REST_Request $req ) {
 	}
 	set_transient( $key, $used + 1, MINUTE_IN_SECONDS );
 
+	$svc     = giga_pisar_opt( 'gigachat_service' );
 	$payload = array(
-		'messages'             => array(
+		'messages'    => array(
 			array( 'role' => 'system', 'content' => giga_pisar_prompt( $mode ) . "\n\nКоманда пользователя к тексту: {$command}." ),
 			array( 'role' => 'user', 'content' => $body ),
 		),
-		'temperature'          => 0.3,
-		'max_tokens'           => 2048,
-		'chat_template_kwargs' => array( 'enable_thinking' => false ),
+		'temperature' => 0.3,
+		'max_tokens'  => 2048,
 	);
+	if ( giga_pisar_opt( 'gigachat_model' ) ) {
+		$payload['model'] = giga_pisar_opt( 'gigachat_model' );
+	}
+	if ( 'llama' === $svc || ! $svc ) {
+		$payload['chat_template_kwargs'] = array( 'enable_thinking' => false ); // поле llama.cpp; облака его отвергают
+	}
 	$r = wp_remote_post(
 		giga_pisar_opt( 'gigachat_url' ) . 'v1/chat/completions',
 		array(
 			'timeout' => 120,
-			'headers' => array( 'Content-Type' => 'application/json' ),
+			'headers' => giga_pisar_upstream_headers(),
 			'body'    => wp_json_encode( $payload ),
 		)
 	);
 	if ( is_wp_error( $r ) ) {
-		return new WP_Error( 'giga_pisar_upstream', __( 'GigaChat не ответил.', 'giga-pisar' ), array( 'status' => 502 ) );
+		return new WP_Error( 'giga_pisar_upstream', sprintf( __( '%s не ответил.', 'giga-pisar' ), giga_pisar_server_brain_label() ), array( 'status' => 502 ) );
 	}
 	$code = (int) wp_remote_retrieve_response_code( $r );
 	$json = json_decode( wp_remote_retrieve_body( $r ), true );
@@ -116,8 +140,9 @@ function giga_pisar_rest_brain( WP_REST_Request $req ) {
 	}
 	$text = trim( $text );
 	if ( 200 !== $code || '' === $text ) {
-		/* translators: %d: HTTP status */
-		return new WP_Error( 'giga_pisar_upstream', sprintf( __( 'GigaChat ответил ошибкой (%d).', 'giga-pisar' ), $code ), array( 'status' => 502 ) );
+		$why = isset( $json['error']['message'] ) ? ': ' . mb_substr( (string) $json['error']['message'], 0, 200 ) : '';
+		/* translators: 1: service name, 2: HTTP status, 3: message */
+		return new WP_Error( 'giga_pisar_upstream', sprintf( __( '%1$s ответил ошибкой (%2$d)%3$s', 'giga-pisar' ), giga_pisar_server_brain_label(), $code, $why ), array( 'status' => 502 ) );
 	}
 	return array( 'text' => $text );
 }

@@ -3,7 +3,7 @@
  * Plugin Name:       Гига Писарь — голосовой ввод
  * Plugin URI:        https://github.com/valerimedvedev/giga-pisar
  * Description:       Диктовка голосом в любое поле ввода и в редакторы WordPress. Речь распознаётся моделью GigaAM прямо в браузере — звук никуда не уходит. Мозг Писаря (очистка речи нейронкой Qwen или GigaChat) — по решению администратора.
- * Version:           1.3.1
+ * Version:           1.4.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Гига Писарь
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'GIGA_PISAR_VERSION', '1.3.1' );
+define( 'GIGA_PISAR_VERSION', '1.4.0' );
 define( 'GIGA_PISAR_FILE', __FILE__ );
 define( 'GIGA_PISAR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GIGA_PISAR_URL', plugin_dir_url( __FILE__ ) );

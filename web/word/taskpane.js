@@ -12,7 +12,7 @@
 import { Engine } from "../giga/engine.js";
 import { Mic } from "../giga/mic.js";
 import * as store from "../giga/model-store.js";
-import { Brain, BRAIN_MODELS, CHIPS, DEFAULT_PROMPTS, parseCommand, stripAddress, actionLabel } from "../giga/brain.js";
+import { Brain, BRAIN_MODELS, CHIPS, DEFAULT_PROMPTS, parseCommand, stripAddress, actionLabel, cloudForm, cloudService } from "../giga/brain.js";
 import * as doc from "./doc.js";
 
 const $ = (id) => document.getElementById(id);
@@ -198,6 +198,7 @@ function whereLabel() {
   if (!m) return "Мозг выключен";
   if (m.id === "local") return `Мозг: на компьютере${brain.local.model ? " · " + brain.local.model : ""}`;
   if (m.id === "gigachat") return "Мозг: GigaChat на сервере";
+  if (m.id === "cloud") return `Мозг: ${cloudService(brain.cloud.service)?.name || "облако"}`;
   return "Мозг: Qwen3-4B в Word";
 }
 
@@ -258,6 +259,7 @@ function togglePanel(open = $("panel").hidden) {
 
 function modelState(m) {
   if (m.where === "local") return { ok: `отвечает на ${brain.local.base}`, absent: "не найден — запустите GigaBrain", nokey: "просит ключ доступа", unknown: "ищу на компьютере…" }[brain.localState];
+  if (m.where === "cloud") return { ok: "ключ принят", absent: "не отвечает", nokey: "нужен ключ API", unknown: "не проверен" }[brain.cloudState];
   if (m.where === "server") return { ok: "доступен на сервере", loading: "сервер поднимает модель…", absent: "на сервере не установлен", unknown: "проверяю сервер…" }[brain.server];
   return { absent: `не скачан (${gb(m.size)} ГБ)`, downloading: `скачиваю: ${Math.floor(brain.qwenProgress * 100)}%`, ready: "скачан", loaded: "скачан и загружен", unknown: "проверяю…" }[brain.qwen];
 }
@@ -298,6 +300,7 @@ function renderBrain() {
       form.append(base, key, model, check);
       row.append(form);
     }
+    if (m.where === "cloud") row.append(cloudForm(brain, renderBrain));
     if (m.where === "browser") {
       const act = document.createElement("span");
       act.className = "brain-actions";
@@ -315,6 +318,7 @@ function renderBrain() {
   else if (m?.id === "gigachat" && brain.server !== "ok") note = "GigaChat сейчас недоступен — выберите Qwen или мозг на компьютере.";
   else if (m?.id === "local" && brain.localState === "absent") note = "На компьютере мозг не найден. Запустите GigaBrain и нажмите «Найти / проверить».";
   else if (m?.id === "local" && brain.localState === "nokey") note = "Введите ключ доступа из окна GigaBrain и нажмите «Найти / проверить».";
+  else if (m?.id === "cloud" && brain.cloudState !== "ok") note = "Выберите сервис, вставьте свой ключ API и нажмите «Проверить и сохранить». Текст будет уходить в этот сервис.";
   else if (m?.id === "qwen" && brain.qwen === "absent") note = "Нажмите «Скачать» — Qwen загрузится один раз (1,9 ГБ).";
   else if (m) note = "Мозг готов. Скажите в конце диктовки «Писарь, исправь» или откройте 🧠.";
   $("brain-status").textContent = note;

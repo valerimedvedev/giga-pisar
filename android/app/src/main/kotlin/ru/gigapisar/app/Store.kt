@@ -19,6 +19,10 @@ class Store(context: Context) {
     var pcModel: String get() = p.getString("pc.model", "")!!; set(v) = p.edit().putString("pc.model", v).apply()
     var serverBase: String get() = p.getString("srv.base", "")!!; set(v) = p.edit().putString("srv.base", v).apply()
     var serverKey: String get() = p.getString("srv.key", "")!!; set(v) = p.edit().putString("srv.key", v).apply()
+    var cloudService: String get() = p.getString("cloud.service", "gemini")!!; set(v) = p.edit().putString("cloud.service", v).apply()
+    var cloudBase: String get() = p.getString("cloud.base", "")!!; set(v) = p.edit().putString("cloud.base", v).apply()
+    var cloudKey: String get() = p.getString("cloud.key", "")!!; set(v) = p.edit().putString("cloud.key", v).apply()
+    var cloudModel: String get() = p.getString("cloud.model", "")!!; set(v) = p.edit().putString("cloud.model", v).apply()
     var serverModel: String get() = p.getString("srv.model", "")!!; set(v) = p.edit().putString("srv.model", v).apply()
 
     // ── скорость

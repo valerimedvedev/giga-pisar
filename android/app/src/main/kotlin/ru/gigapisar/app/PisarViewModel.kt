@@ -71,6 +71,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val brainMode: String, val phoneModel: String,
         val pcBase: String, val pcKey: String, val pcModel: String,
         val serverBase: String, val serverKey: String, val serverModel: String,
+        val cloudService: String, val cloudBase: String, val cloudKey: String, val cloudModel: String,
         val asrThreads: Int, val llmThreads: Int, val liveInsert: Boolean, val autoTidy: Boolean,
         val chips: List<Chip>, val promptDictation: String, val promptSelection: String, val promptChat: String,
     )
@@ -424,6 +425,14 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
                 if (s.serverBase.isBlank()) throw IOException("не задан адрес сервера: Настройки → Мозг → На сервере")
                 OpenAiChat.chat(s.serverBase, messages, s.serverKey, s.serverModel, maxTokens = maxTokens)
             }
+            "cloud" -> {
+                val svc = ru.gigapisar.engine.Cloud.byId(s.cloudService)
+                val base = s.cloudBase.ifBlank { svc?.base ?: "" }
+                if (base.isBlank() || "ACCOUNT_ID" in base) throw IOException("не задан адрес сервиса: Настройки → Мозг → Облачный сервис")
+                if (s.cloudKey.isBlank()) throw IOException("нет ключа API: Настройки → Мозг → Облачный сервис")
+                status(label)
+                OpenAiChat.chat(base, messages, s.cloudKey, s.cloudModel.ifBlank { svc?.model ?: "" }, maxTokens = maxTokens, llamaExtras = false)
+            }
             else -> throw IOException("мозг выключен: Настройки → Мозг")
         }.ifBlank { throw IOException("нейронка ничего не ответила") }
     }
@@ -500,7 +509,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     // ─────────────────────────── настройки ───────────────────────────
 
     private fun readSettings() = Settings(store.brainMode, store.phoneModel, store.pcBase, store.pcKey, store.pcModel,
-        store.serverBase, store.serverKey, store.serverModel, store.asrThreads, store.llmThreads, store.liveInsert, store.autoTidy,
+        store.serverBase, store.serverKey, store.serverModel, store.cloudService, store.cloudBase, store.cloudKey, store.cloudModel, store.asrThreads, store.llmThreads, store.liveInsert, store.autoTidy,
         store.chips, store.promptDictation, store.promptSelection, store.promptChat)
 
     fun save(s: Settings) {
@@ -508,6 +517,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         store.brainMode = s.brainMode; store.phoneModel = s.phoneModel
         store.pcBase = s.pcBase; store.pcKey = s.pcKey; store.pcModel = s.pcModel
         store.serverBase = s.serverBase; store.serverKey = s.serverKey; store.serverModel = s.serverModel
+        store.cloudService = s.cloudService; store.cloudBase = s.cloudBase; store.cloudKey = s.cloudKey; store.cloudModel = s.cloudModel
         store.asrThreads = s.asrThreads; store.llmThreads = s.llmThreads; store.liveInsert = s.liveInsert; store.autoTidy = s.autoTidy
         store.chips = s.chips; store.promptDictation = s.promptDictation; store.promptSelection = s.promptSelection; store.promptChat = s.promptChat
         settings = readSettings()

@@ -19,7 +19,10 @@ function giga_pisar_defaults() {
 		'brain'          => 0,          // мозг: очистка речи и команды
 		'brain_provider' => 'qwen',     // qwen (в браузере) | gigachat (на сервере)
 		'brain_who'      => 'admins',   // admins | dictation — кому доступен мозг
-		'gigachat_url'   => '',         // llama-server с GigaChat (OpenAI-совместимый)
+		'gigachat_url'   => '',         // OpenAI-совместимый адрес: llama-server с GigaChat или облачный сервис
+		'gigachat_key'   => '',         // ключ API (облачные сервисы; хранится только на сервере)
+		'gigachat_model' => '',         // имя модели (у облачных сервисов обязательно)
+		'gigachat_service' => 'llama',  // llama | gemini | groq | openrouter | mistral | huggingface | cloudflare
 		'model_url'      => '',         // свой адрес архива GigaAM
 		'qwen_url'       => '',         // свой адрес Qwen .gguf
 		'isolation'      => 0,          // заголовки COOP/COEP — многопоточность
@@ -160,6 +163,15 @@ function giga_pisar_sanitize_options( $in ) {
 	if ( isset( $in['brain_who'] ) ) {
 		$out['brain_who'] = in_array( $in['brain_who'], array( 'admins', 'dictation' ), true ) ? $in['brain_who'] : $d['brain_who'];
 	}
+	if ( isset( $in['gigachat_key'] ) ) {
+		$out['gigachat_key'] = mb_substr( trim( wp_strip_all_tags( $in['gigachat_key'] ) ), 0, 300 );
+	}
+	if ( isset( $in['gigachat_model'] ) ) {
+		$out['gigachat_model'] = mb_substr( trim( wp_strip_all_tags( $in['gigachat_model'] ) ), 0, 200 );
+	}
+	if ( isset( $in['gigachat_service'] ) ) {
+		$out['gigachat_service'] = array_key_exists( $in['gigachat_service'], giga_pisar_cloud_services() ) ? $in['gigachat_service'] : 'llama';
+	}
 	foreach ( array( 'gigachat_url', 'model_url', 'qwen_url' ) as $k ) {
 		if ( isset( $in[ $k ] ) ) {
 			$url       = esc_url_raw( trim( $in[ $k ] ), array( 'http', 'https' ) );
@@ -192,4 +204,27 @@ function giga_pisar_can_brain() {
 		return current_user_can( 'manage_options' );
 	}
 	return giga_pisar_can_dictate( 'frontend' ) || giga_pisar_can_dictate( 'admin' );
+}
+
+/** Облачные сервисы с бесплатным тарифом — тот же список, что в web/giga/cloud.js. */
+function giga_pisar_cloud_services() {
+	return array(
+		'llama'       => array( 'name' => 'llama-server (GigaChat на своём сервере)', 'base' => 'http://127.0.0.1:8091/', 'model' => '', 'key' => '', 'note' => __( 'своя нейронка на сервере сайта, ключ не нужен', 'giga-pisar' ) ),
+		'gemini'      => array( 'name' => 'Google Gemini', 'base' => 'https://generativelanguage.googleapis.com/v1beta/openai/', 'model' => 'gemini-2.5-flash', 'key' => 'https://aistudio.google.com/apikey', 'note' => __( 'бесплатный тариф с лимитами; Google может использовать данные бесплатного тарифа для улучшения продуктов', 'giga-pisar' ) ),
+		'groq'        => array( 'name' => 'GroqCloud', 'base' => 'https://api.groq.com/openai/v1/', 'model' => 'llama-3.3-70b-versatile', 'key' => 'https://console.groq.com/keys', 'note' => __( 'очень быстрые ответы; квоты по моделям', 'giga-pisar' ) ),
+		'openrouter'  => array( 'name' => 'OpenRouter', 'base' => 'https://openrouter.ai/api/v1/', 'model' => 'google/gemma-3-27b-it:free', 'key' => 'https://openrouter.ai/keys', 'note' => __( 'бесплатные модели :free; без кредитов — 50 запросов в день', 'giga-pisar' ) ),
+		'mistral'     => array( 'name' => 'Mistral', 'base' => 'https://api.mistral.ai/v1/', 'model' => 'mistral-small-latest', 'key' => 'https://console.mistral.ai/api-keys', 'note' => __( 'режим Free без карты, месячный объём в панели', 'giga-pisar' ) ),
+		'huggingface' => array( 'name' => 'Hugging Face', 'base' => 'https://router.huggingface.co/v1/', 'model' => 'Qwen/Qwen2.5-72B-Instruct', 'key' => 'https://huggingface.co/settings/tokens', 'note' => __( 'около $0,10 в месяц бесплатно — только проверить', 'giga-pisar' ) ),
+		'cloudflare'  => array( 'name' => 'Cloudflare Workers AI', 'base' => 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1/', 'model' => '@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'key' => 'https://dash.cloudflare.com/profile/api-tokens', 'note' => __( '10 000 нейронов в день; в адресе замените ACCOUNT_ID', 'giga-pisar' ) ),
+	);
+}
+
+/** Как называть серверный мозг в интерфейсе. */
+function giga_pisar_server_brain_label() {
+	$svc = giga_pisar_opt( 'gigachat_service' );
+	if ( 'llama' === $svc || ! $svc ) {
+		return 'GigaChat';
+	}
+	$all = giga_pisar_cloud_services();
+	return isset( $all[ $svc ] ) ? $all[ $svc ]['name'] : $svc;
 }

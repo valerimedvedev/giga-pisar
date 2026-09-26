@@ -14,6 +14,9 @@
 //
 // Выбор модели и адрес местного мозга запоминаются в localStorage.
 
+import { CLOUD_SERVICES, cloudService } from "./cloud.js";
+export { CLOUD_SERVICES, cloudService };
+
 const ru = (navigator.language || "ru").toLowerCase().startsWith("ru");
 const L = (r, e) => (ru ? r : e);
 
@@ -41,6 +44,13 @@ export const LOCAL_CANDIDATES = [
 ];
 
 export const BRAIN_MODELS = [
+  {
+    id: "cloud",
+    name: L("Облачный сервис", "Cloud service"),
+    where: "cloud",
+    details: L("Gemini, Groq, OpenRouter… по своему бесплатному ключу · текст уходит в сервис",
+               "Gemini, Groq, OpenRouter… with your own free key · text goes to the service"),
+  },
   {
     id: "local",
     name: L("На моём компьютере", "On my computer"),
@@ -170,6 +180,14 @@ export function messagesFor(body, command, mode, prompts = DEFAULT_PROMPTS) {
   ];
 }
 
+/** Настройки облачного сервиса человека: сервис, адрес, ключ, модель. */
+export function cloudSettings() {
+  try { return JSON.parse(localStorage.getItem("giga.cloud") || "{}") || {}; } catch { return {}; }
+}
+export function saveCloudSettings(v) {
+  try { localStorage.setItem("giga.cloud", JSON.stringify(v)); } catch { /* приватное окно */ }
+}
+
 /** Настройки местного мозга человека: адрес, ключ, модель. */
 export function localSettings() {
   try { return JSON.parse(localStorage.getItem("giga.local") || "{}") || {}; } catch { return {}; }
@@ -234,6 +252,9 @@ export class Brain extends EventTarget {
     this.local = { ...localSettings(), ...(local || {}) };   // { base, key, model }
     this.localState = "unknown";   // unknown | ok | absent | nokey
     this.localModels = [];
+    this.cloud = { service: "gemini", ...cloudSettings() };   // { service, base, key, model }
+    this.cloudState = "unknown";   // unknown | ok | absent | nokey
+    this.cloudModels = [];
     this.serverBase = serverBase;
     this.serverChatFn = serverChat;
     this.serverHealthFn = serverHealth;
@@ -254,7 +275,40 @@ export class Brain extends EventTarget {
     if (this.chosenId === "gigachat") return this.server === "ok";
     if (this.chosenId === "qwen") return this.qwen === "ready" || this.qwen === "loaded";
     if (this.chosenId === "local") return this.localState === "ok";
+    if (this.chosenId === "cloud") return this.cloudState === "ok";
     return false;
+  }
+
+  /** Адрес и модель облачного сервиса: свои или из пресета. */
+  get cloudBase() { return normBase(this.cloud.base || cloudService(this.cloud.service)?.base || ""); }
+  get cloudModel() { return this.cloud.model || cloudService(this.cloud.service)?.model || ""; }
+
+  setCloud(v) {
+    this.cloud = { ...this.cloud, ...v };
+    saveCloudSettings(this.cloud);
+    this.changed();
+  }
+
+  /** Проверяет ключ: список моделей (у Cloudflare списка нет — верим ключу). */
+  async checkCloud() {
+    const svc = cloudService(this.cloud.service);
+    const base = this.cloudBase;
+    if (!base || base.includes("ACCOUNT_ID") || !this.cloud.key) { this.cloudState = "nokey"; this.changed(); return; }
+    try {
+      if (svc && !svc.listsModels) { this.cloudState = "ok"; this.changed(); return; }
+      this.cloudModels = await listLocalModels(base, this.cloud.key, 8000);
+      if (this.cloudModels.length && !this.cloudModels.includes(this.cloudModel)) {
+        // у некоторых сервисов список огромный — пресет оставляем, если он там есть под другим именем
+        const want = this.cloudModel;
+        if (!this.cloudModels.some((m) => m.endsWith(want))) this.cloud.model = this.cloudModels[0];
+      }
+      this.cloudState = "ok";
+      saveCloudSettings(this.cloud);
+    } catch (e) {
+      this.cloudState = /ключ|key/.test(e.message || "") ? "nokey" : "absent";
+      this.lastError = e.message;
+    }
+    this.changed();
   }
 
   /** Меняет адрес/ключ/модель местного мозга и запоминает их. */
@@ -300,7 +354,7 @@ export class Brain extends EventTarget {
 
   /** Что с моделями: сервер отвечает? Qwen уже в браузере? */
   async refresh() {
-    await Promise.all([this.checkServer(), this.checkQwen(), this.checkLocal()]);
+    await Promise.all([this.checkServer(), this.checkQwen(), this.checkLocal(), this.chosenId === "cloud" ? this.checkCloud() : null]);
     this.changed();
     if (this.chosenId === "qwen" && this.qwen === "ready") this.warmUp();
   }
@@ -452,6 +506,15 @@ export class Brain extends EventTarget {
       }
       onStage(actionLabel(command));
       out = await this.chatOpenAI(normBase(this.local.base), messages, { key: this.local.key, model: this.local.model });
+    } else if (this.chosenId === "cloud") {
+      if (this.cloudState !== "ok") await this.checkCloud();
+      if (this.cloudState !== "ok") {
+        throw new Error(this.cloudState === "nokey"
+          ? L("облачному сервису нужен ключ API (⚙ Мозг)", "the cloud service needs an API key")
+          : L("облачный сервис не отвечает", "the cloud service does not answer"));
+      }
+      onStage(actionLabel(command));
+      out = await this.chatOpenAI(this.cloudBase, messages, { key: this.cloud.key, model: this.cloudModel, llamaExtras: false });
     } else if (this.chosenId === "gigachat") {
       onStage(actionLabel(command));
       out = this.serverChatFn ? await this.serverChatFn(body, command, mode) : await this.chatServer(messages);
@@ -480,7 +543,7 @@ export class Brain extends EventTarget {
   }
 
   /** Запрос к любому OpenAI-совместимому серверу (llama-server, Ollama, LM Studio). */
-  async chatOpenAI(base, messages, { key = "", model = "" } = {}) {
+  async chatOpenAI(base, messages, { key = "", model = "", llamaExtras = true } = {}) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
@@ -490,10 +553,12 @@ export class Brain extends EventTarget {
         body: JSON.stringify({
           ...(model ? { model } : {}),
           messages, temperature: 0.3, max_tokens: 2048, stream: false,
-          chat_template_kwargs: { enable_thinking: false },
+          // поле llama.cpp; облачные сервисы незнакомые поля отвергают
+          ...(llamaExtras ? { chat_template_kwargs: { enable_thinking: false } } : {}),
         }),
         signal: ctl.signal,
       });
+      if (r.status === 401 || r.status === 403) throw new Error(L("ключ не принят", "the key was rejected"));
       if (r.status === 429) throw new Error(L("слишком много запросов подряд, подождите минуту", "too many requests, wait a minute"));
       if (!r.ok) throw new Error(L(`сервер ответил ${r.status}`, `server answered ${r.status}`));
       const j = await r.json();
@@ -505,4 +570,44 @@ export class Brain extends EventTarget {
       clearTimeout(timer);
     }
   }
+}
+
+/** Форма облачного сервиса: пресет, адрес, ключ, модель, «Проверить». */
+export function cloudForm(brain, rerender) {
+  const form = document.createElement("div");
+  form.className = "local-form";
+  form.addEventListener("click", (e) => e.stopPropagation());
+  const select = document.createElement("select");
+  for (const s of CLOUD_SERVICES) {
+    const o = document.createElement("option");
+    o.value = s.id; o.textContent = s.name + (s.browser ? "" : " (только через сервер)"); o.selected = s.id === brain.cloud.service;
+    select.append(o);
+  }
+  const note = document.createElement("span");
+  note.className = "hint";
+  const base = document.createElement("input"); base.type = "text"; base.spellcheck = false; base.placeholder = "https://…/v1";
+  const key = document.createElement("input"); key.type = "password"; key.placeholder = "ключ API";
+  const model = document.createElement("input"); model.type = "text"; model.spellcheck = false; model.placeholder = "модель";
+  const link = document.createElement("a"); link.target = "_blank"; link.rel = "noopener";
+  const fill = () => {
+    const svc = cloudService(select.value) || CLOUD_SERVICES[0];
+    const same = svc.id === brain.cloud.service;
+    base.value = same ? (brain.cloud.base || svc.base) : svc.base;
+    model.value = same ? (brain.cloud.model || svc.model) : svc.model;
+    key.value = same ? (brain.cloud.key || "") : "";
+    note.textContent = svc.note;
+    link.href = svc.keyUrl; link.textContent = "получить ключ: " + svc.keyUrl.replace("https://", "");
+  };
+  select.addEventListener("change", fill);
+  fill();
+  const check = document.createElement("button");
+  check.type = "button"; check.textContent = "Проверить и сохранить";
+  check.addEventListener("click", async () => {
+    brain.setCloud({ service: select.value, base: base.value.trim(), key: key.value.trim(), model: model.value.trim() });
+    brain.cloudState = "unknown"; brain.lastError = null;
+    rerender?.();
+    await brain.checkCloud();
+  });
+  form.append(select, note, link, base, key, model, check);
+  return form;
 }

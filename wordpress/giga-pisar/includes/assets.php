@@ -36,6 +36,7 @@ function giga_pisar_client_config() {
 		'modelUrl'   => giga_pisar_gigaam_url(),
 		'archiveUrl' => GIGA_PISAR_GIGAAM_URL,
 		'brain'      => giga_pisar_can_brain() ? $o['brain_provider'] : null,
+		'brainLabel' => giga_pisar_server_brain_label(),
 		'chips'      => array_values( (array) $o['chips'] ),
 		'prompts'    => array( 'dictation' => giga_pisar_prompt( 'dictation' ), 'selection' => giga_pisar_prompt( 'selection' ) ),
 		'brainLocal' => (bool) $o['brain_local'] && giga_pisar_can_brain(),

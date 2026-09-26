@@ -890,7 +890,7 @@ class Pisar {
     const busy = this.state !== "idle";
     const local = b.chosenId === "local";
     const who = local ? L("нейронка на моём компьютере", "brain on my computer")
-      : this.siteProvider === "gigachat" ? L("GigaChat на сервере", "GigaChat on the server") : L("Qwen в браузере", "Qwen in the browser");
+      : this.siteProvider === "gigachat" ? L(`${cfg.brainLabel || "GigaChat"} на сервере`, `${cfg.brainLabel || "GigaChat"} on the server`) : L("Qwen в браузере", "Qwen in the browser");
     const scope = t ? this.scopeOf(t) : { label: "", whole: null };
     panel.textContent = "";
     const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -979,7 +979,7 @@ class Pisar {
   /** Окно «⚙ Мозг»: на сайте или на моём компьютере; адрес, ключ, модель. */
   async brainSettings() {
     const b = this.brain;
-    const site = this.siteProvider === "gigachat" ? "GigaChat" : "Qwen3-4B";
+    const site = this.siteProvider === "gigachat" ? (cfg.brainLabel || "GigaChat") : "Qwen3-4B";
     const siteWhere = this.siteProvider === "gigachat" ? L("на сервере сайта", "on the site's server") : L("в браузере", "in the browser");
     const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     const html = `

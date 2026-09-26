@@ -88,6 +88,7 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
                 RadioRow("На телефоне — нейронка в этом приложении (llama.cpp)", s.brainMode == "phone") { vm.save(s.copy(brainMode = "phone")) }
                 RadioRow("На компьютере — GigaBrain / Ollama / LM Studio по домашней сети", s.brainMode == "pc") { vm.save(s.copy(brainMode = "pc")) }
                 RadioRow("На сервере — GigaChat или другой OpenAI-совместимый адрес", s.brainMode == "server") { vm.save(s.copy(brainMode = "server")) }
+                RadioRow("Облачный сервис с бесплатным тарифом — Gemini, Groq, OpenRouter, Mistral…", s.brainMode == "cloud") { vm.save(s.copy(brainMode = "cloud")) }
                 SliderRow("Потоков на нейронку телефона: ${s.llmThreads}", s.llmThreads, 2..8) { vm.save(s.copy(llmThreads = it)) }
             }
 
@@ -128,6 +129,25 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
                 RemoteForm(vm, s.serverBase, s.serverKey, s.serverModel, hint = "https://vmindlab.ru/pisar/brain",
                     note = "Любой OpenAI-совместимый адрес (…/v1/chat/completions). Туда уходит только текст.",
                     lan = false) { b, k, m -> vm.save(s.copy(serverBase = b, serverKey = k, serverModel = m)) }
+            }
+
+            if (s.brainMode == "cloud") Section("Облачный сервис") {
+                Text("Нужен свой ключ API (бесплатный). Текст уходит в сервис — читайте его условия. Ответы обычно за 1–3 с.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                for (c in ru.gigapisar.engine.Cloud.SERVICES) Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = s.cloudService == c.id, onClick = { vm.save(s.copy(cloudService = c.id, cloudBase = c.base, cloudModel = c.model)) })
+                    Column(Modifier.weight(1f)) {
+                        Text(c.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(c.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                val svc = ru.gigapisar.engine.Cloud.byId(s.cloudService)
+                if (svc != null) {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    TextButton(onClick = { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(svc.keyUrl))) }) { Text("Получить ключ: ${svc.keyUrl.removePrefix("https://")}") }
+                }
+                RemoteForm(vm, s.cloudBase.ifBlank { svc?.base ?: "" }, s.cloudKey, s.cloudModel.ifBlank { svc?.model ?: "" }, hint = svc?.base ?: "",
+                    note = if (svc?.listsModels == false) "Этот сервис не отдаёт список моделей — «Проверить» лишь сохранит; имя модели впишите вручную." else "«Проверить и сохранить» спросит у сервиса список моделей и запомнит ключ.",
+                    lan = false) { b, k, m -> vm.save(s.copy(cloudBase = b, cloudKey = k, cloudModel = m)) }
             }
 
             Section("Команды на кнопках (до 10)") {

@@ -3,7 +3,7 @@
 import { Engine } from "./giga/engine.js";
 import { attachDictation } from "./giga/dictation.js";
 import * as store from "./giga/model-store.js";
-import { Brain, BRAIN_MODELS, CHIPS } from "./giga/brain.js";
+import { Brain, BRAIN_MODELS, CHIPS, cloudForm } from "./giga/brain.js";
 
 const ru = (navigator.language || "ru").toLowerCase().startsWith("ru");
 const L = (r, e) => (ru ? r : e);
@@ -138,6 +138,14 @@ function modelState(m) {
       unknown: L("ищу на компьютере…", "looking on this computer…"),
     }[brain.localState];
   }
+  if (m.where === "cloud") {
+    return {
+      ok: L(`${brain.cloud.service}: ключ принят`, `${brain.cloud.service}: key accepted`),
+      absent: L("не отвечает", "does not answer"),
+      nokey: L("нужен ключ API", "an API key is needed"),
+      unknown: L("не проверен", "not checked"),
+    }[brain.cloudState];
+  }
   if (m.where === "server") {
     return {
       server: L("доступен на сервере", "available on the server"),
@@ -212,6 +220,7 @@ function renderBrain() {
       form.append(base, key, model, check);
       row.append(form);
     }
+    if (m.where === "cloud") row.append(cloudForm(brain, renderBrain));
     if (m.where === "browser") {
       const act = document.createElement("span");
       act.className = "brain-actions";
@@ -240,6 +249,7 @@ function renderBrain() {
   else if (m?.id === "gigachat" && brain.server !== "ok") note = L("GigaChat сейчас недоступен — выберите Qwen, он считает прямо в браузере.", "GigaChat is unavailable now — choose Qwen, it runs in the browser.");
   else if (m?.id === "local" && brain.localState === "absent") note = L("На компьютере мозг не найден. Запустите GigaBrain (brain-local/dist) или Ollama и нажмите «Проверить».", "No local brain found. Install Ollama or our brain-local (see README) and press Check.");
   else if (m?.id === "local" && brain.localState === "nokey") note = L("Введите ключ доступа, который показала программа при запуске, и нажмите «Проверить».", "Enter the access key the app printed at start and press Check.");
+  else if (m?.id === "cloud" && brain.cloudState !== "ok") note = L("Выберите сервис, вставьте свой ключ API и нажмите «Проверить и сохранить». Текст будет уходить в этот сервис.", "Pick a service, paste your API key and press Check. Text will be sent to that service.");
   else if (m?.id === "qwen" && brain.qwen === "absent") note = L("Нажмите «Скачать» — Qwen загрузится один раз и останется в браузере.", "Press Download — Qwen is fetched once and stays in the browser.");
   else if (m) note = L("Мозг готов. Скажите в конце диктовки «Писарь, исправь».", "The brain is ready. Say “Pisar, fix it” at the end of dictation.");
   $("brain-status").textContent = note;
