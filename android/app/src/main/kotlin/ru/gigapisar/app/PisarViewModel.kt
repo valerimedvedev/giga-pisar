@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.gigapisar.engine.Brain
 import ru.gigapisar.engine.Catalog
+import ru.gigapisar.engine.ChatMessage
 import ru.gigapisar.engine.Chip
 import ru.gigapisar.engine.LiveChunker
 import ru.gigapisar.engine.LlmModel
@@ -54,6 +55,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val askDownload: Boolean = false,   // первая диктовка: спросить согласие на 213 МБ
         val modelReady: Boolean = false,
         val words: Int = 0,
+        val mode: String = "dictation",     // dictation | dictaphone | chat
         // диктофон
         val dictaphone: Boolean = false,    // режим диктофона включён
         val recSeconds: Double = 0.0,       // длина текущей записи
@@ -61,17 +63,20 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val parts: Int = 0,                 // сколько частей уже распознано
         val records: List<File> = emptyList(),
         val transcribing: File? = null,     // расшифровка старой записи идёт
+        // общение
+        val chat: List<ChatMessage> = emptyList(),
+        val thinking: Boolean = false,
     )
     data class Settings(
         val brainMode: String, val phoneModel: String,
         val pcBase: String, val pcKey: String, val pcModel: String,
         val serverBase: String, val serverKey: String, val serverModel: String,
         val asrThreads: Int, val llmThreads: Int, val liveInsert: Boolean, val autoTidy: Boolean,
-        val chips: List<Chip>, val promptDictation: String, val promptSelection: String,
+        val chips: List<Chip>, val promptDictation: String, val promptSelection: String, val promptChat: String,
     )
 
     private val recordsDir = File(app.filesDir, "records").apply { mkdirs() }
-    private val _ui = MutableStateFlow(Ui(modelReady = models.hasGigaAm(), dictaphone = store.dictaphone, records = listRecords()))
+    private val _ui = MutableStateFlow(Ui(modelReady = models.hasGigaAm(), mode = store.mode, dictaphone = store.mode == "dictaphone", records = listRecords()))
     val ui = _ui.asStateFlow()
 
     /** Текст поля — единственный источник правды, поле его только показывает. */
@@ -79,6 +84,14 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var settings by mutableStateOf(readSettings())
         private set
+    /** Поле ввода в режиме «Общение» — диктовка идёт в него. */
+    var chatInput by mutableStateOf(TextFieldValue())
+        private set
+    fun onChatInputChange(v: TextFieldValue) { chatInput = v }
+    private val chatMode get() = _ui.value.mode == "chat"
+    private var target: TextFieldValue
+        get() = if (chatMode) chatInput else text
+        set(v) { if (chatMode) chatInput = v else text = v }
     var history by mutableStateOf(store.history)
         private set
     var pcModels by mutableStateOf<List<String>>(emptyList())
@@ -125,12 +138,12 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     fun startRecording() {
         if (_ui.value.busy || _ui.value.recording) return
         if (!models.hasGigaAm()) { _ui.update { it.copy(askDownload = true) }; return }
-        val t = text
+        val t = target
         val a = t.selection.min; val b = t.selection.max
         sessionStart = a
         sessionTail = t.text.substring(b)
         sessionText = ""; sessionLen = 0
-        if (b > a) text = TextFieldValue(t.text.substring(0, a) + sessionTail, TextRange(a))   // диктовка заменяет выделенное
+        if (b > a) target = TextFieldValue(t.text.substring(0, a) + sessionTail, TextRange(a))   // диктовка заменяет выделенное
         jobs.clear()
         val dictaphone = _ui.value.dictaphone
         // диктофон: части длиннее, паузы режут абзацами, звук пишется в файл
@@ -197,14 +210,14 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun placeSession(s: String) {
-        val cur = text.text
+        val cur = target.text
         val head = if (sessionStart <= cur.length) cur.substring(0, sessionStart) else cur
         val gapL = if (head.isNotEmpty() && !head.last().isWhitespace() && s.isNotEmpty()) " " else ""
         val gapR = if (sessionTail.isNotEmpty() && !sessionTail.first().isWhitespace() && s.isNotEmpty()) " " else ""
         val body = gapL + s + gapR
         sessionLen = body.length
         val pos = head.length + gapL.length + s.length
-        text = TextFieldValue(head + body + sessionTail, TextRange(pos))
+        target = TextFieldValue(head + body + sessionTail, TextRange(pos))
         _ui.update { it.copy(words = wordCount(text.text)) }
     }
 
@@ -230,6 +243,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val cmd = Brain.parseCommand(full)
         val brainOn = settings.brainMode != "off"
         when {
+            chatMode -> status("Надиктовано: ${wordCount(full)} сл. — «Отправить»", Kind.OK)
             cmd != null && brainOn -> replaceSession(cmd.body, cmd.command)
             cmd != null -> status("Команда «${cmd.command}» — мозг выключен, включите его в настройках", Kind.WARN)
             settings.autoTidy && brainOn -> replaceSession(full, settings.chips.firstOrNull()?.command ?: Brain.DEFAULT_CHIPS[0].command)
@@ -240,12 +254,50 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
 
     // ─────────────────────────── диктофон ───────────────────────────
 
-    fun setDictaphone(on: Boolean) {
-        if (_ui.value.recording) return
-        store.dictaphone = on
-        _ui.update { it.copy(dictaphone = on) }
-        status(if (on) "Диктофон: длинная запись по частям — пауза, продолжение, файл остаётся" else "Нажмите «Запись» и говорите")
+    fun setMode(mode: String) {
+        if (_ui.value.recording || _ui.value.busy) return
+        store.mode = mode
+        _ui.update { it.copy(mode = mode, dictaphone = mode == "dictaphone") }
+        status(when (mode) {
+            "dictaphone" -> "Диктофон: длинная запись по частям — пауза, продолжение, файл остаётся"
+            "chat" -> if (brainEnabled) "Общение с нейронкой: пишите или диктуйте вопрос" else "Для общения включите мозг: Настройки → Мозг"
+            else -> "Нажмите «Запись» и говорите"
+        })
     }
+
+    // ─────────────────────────── общение ───────────────────────────
+
+    /** Отправляет реплику; нейронка видит всю беседу. */
+    fun sendChat() {
+        val q = chatInput.text.trim()
+        if (q.isEmpty() || _ui.value.thinking || _ui.value.recording) return
+        if (!brainEnabled) { status("Для общения включите мозг: Настройки → Мозг", Kind.WARN); return }
+        chatInput = TextFieldValue()
+        val history = _ui.value.chat + ChatMessage("user", q)
+        _ui.update { it.copy(chat = history, thinking = true, busy = true) }
+        status("Думает…")
+        viewModelScope.launch {
+            try {
+                val messages = listOf(ChatMessage("system", settings.promptChat)) + history.takeLast(20)
+                val answer = withContext(llm) { askProvider(messages, maxTokens = 2048) }
+                _ui.update { it.copy(chat = it.chat + ChatMessage("assistant", answer)) }
+                status("Ответ получен", Kind.OK)
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) {
+                status("Мозг: ${friendly(e)}", Kind.ERROR)
+                _ui.update { it.copy(chat = it.chat.dropLast(1)) }
+                chatInput = TextFieldValue(q, TextRange(q.length))
+            } finally { _ui.update { it.copy(thinking = false, busy = false) } }
+        }
+    }
+
+    fun clearChat() { _ui.update { it.copy(chat = emptyList()) }; status("Беседа очищена") }
+
+    /** Беседа как текст — для экспорта и копирования. */
+    fun chatAsText(): String = _ui.value.chat.joinToString("\n\n") { (if (it.role == "user") "Вы: " else "Писарь: ") + it.content }
+
+    /** Что экспортировать в текущем режиме. */
+    fun exportText(): String = if (chatMode) chatAsText() else text.text
 
     /** Пауза / продолжение записи диктофона: файл и текст продолжаются с того же места. */
     fun togglePause() {
@@ -342,7 +394,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(canUndo = true, words = wordCount(text.text)) }
                 status("Готово" + if (!whole) " (над выделенным)" else "", Kind.OK)
             } catch (e: CancellationException) { throw e
-            } catch (e: Exception) { status("Мозг: ${e.message}", Kind.ERROR)
+            } catch (e: Exception) { status("Мозг: ${friendly(e)}", Kind.ERROR)
             } finally { _ui.update { it.copy(busy = false) } }
         }
     }
@@ -350,25 +402,33 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun transform(body: String, command: String, selection: Boolean): String = withContext(llm) {
         val s = settings
         val messages = Brain.messagesFor(body, command, selection, s.promptDictation, s.promptSelection)
-        when (s.brainMode) {
+        askProvider(messages, label = Brain.actionLabel(command))
+    }
+
+    /** Беседа → выбранная нейронка (телефон / компьютер / сервер) → ответ. */
+    private fun askProvider(messages: List<ChatMessage>, label: String = "Думает…", maxTokens: Int = 1024): String {
+        val s = settings
+        return when (s.brainMode) {
             "phone" -> {
                 val f = models.llmByChoice(s.phoneModel) ?: throw IOException("нейронка не скачана: Настройки → Мозг → На телефоне")
                 if (LocalLlm.loadedPath != f.path) status("Запускаю нейронку…")
                 LocalLlm.ensureLoaded(f, s.llmThreads)
-                status(Brain.actionLabel(command))
-                LocalLlm.chat(messages)
+                status(label)
+                LocalLlm.chat(messages, maxTokens)
             }
             "pc" -> {
                 if (s.pcBase.isBlank()) throw IOException("не задан адрес GigaBrain: Настройки → Мозг → На компьютере")
-                OpenAiChat.chat(s.pcBase, messages, s.pcKey, s.pcModel)
+                OpenAiChat.chat(s.pcBase, messages, s.pcKey, s.pcModel, maxTokens = maxTokens)
             }
             "server" -> {
                 if (s.serverBase.isBlank()) throw IOException("не задан адрес сервера: Настройки → Мозг → На сервере")
-                OpenAiChat.chat(s.serverBase, messages, s.serverKey, s.serverModel)
+                OpenAiChat.chat(s.serverBase, messages, s.serverKey, s.serverModel, maxTokens = maxTokens)
             }
             else -> throw IOException("мозг выключен: Настройки → Мозг")
         }.ifBlank { throw IOException("нейронка ничего не ответила") }
     }
+
+    private fun friendly(e: Throwable) = ru.gigapisar.engine.Downloader.friendly(e)
 
     fun cancelBrain() { LocalLlm.cancel() }
 
@@ -431,7 +491,8 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
                 val msg = block { d, t -> _ui.update { it.copy(progress = if (d == 0L && t == 0L) Progress("$label — распаковка…", 0, 0) else Progress(label, d, t)) } }
                 status(msg, Kind.OK)
             } catch (e: Exception) {
-                status("$label: ${e.message}", if (e.message == "отменено") Kind.WARN else Kind.ERROR)
+                status(if (e.message == "отменено") "$label: скачивание остановлено — недокачанное сохранено, можно продолжить" else "$label: ${friendly(e)}",
+                    if (e.message == "отменено") Kind.WARN else Kind.ERROR)
             } finally { _ui.update { it.copy(busy = false, progress = null) } }
         }
     }
@@ -440,7 +501,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun readSettings() = Settings(store.brainMode, store.phoneModel, store.pcBase, store.pcKey, store.pcModel,
         store.serverBase, store.serverKey, store.serverModel, store.asrThreads, store.llmThreads, store.liveInsert, store.autoTidy,
-        store.chips, store.promptDictation, store.promptSelection)
+        store.chips, store.promptDictation, store.promptSelection, store.promptChat)
 
     fun save(s: Settings) {
         val old = settings
@@ -448,7 +509,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         store.pcBase = s.pcBase; store.pcKey = s.pcKey; store.pcModel = s.pcModel
         store.serverBase = s.serverBase; store.serverKey = s.serverKey; store.serverModel = s.serverModel
         store.asrThreads = s.asrThreads; store.llmThreads = s.llmThreads; store.liveInsert = s.liveInsert; store.autoTidy = s.autoTidy
-        store.chips = s.chips; store.promptDictation = s.promptDictation; store.promptSelection = s.promptSelection
+        store.chips = s.chips; store.promptDictation = s.promptDictation; store.promptSelection = s.promptSelection; store.promptChat = s.promptChat
         settings = readSettings()
         if (old.asrThreads != s.asrThreads) { rnnt?.close(); rnnt = null }
         if (old.llmThreads != s.llmThreads || (old.phoneModel != s.phoneModel)) LocalLlm.unload()
@@ -456,7 +517,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun resetChips() = save(settings.copy(chips = Brain.DEFAULT_CHIPS))
-    fun resetPrompts() = save(settings.copy(promptDictation = Brain.DICTATION_PROMPT, promptSelection = Brain.SELECTION_PROMPT))
+    fun resetPrompts() = save(settings.copy(promptDictation = Brain.DICTATION_PROMPT, promptSelection = Brain.SELECTION_PROMPT, promptChat = Store.CHAT_PROMPT))
 
     /** Проверяет мозг на компьютере или сервере: список моделей. */
     fun checkRemote(base: String, key: String, onDone: (Result<List<String>>) -> Unit) {

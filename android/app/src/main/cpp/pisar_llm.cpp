@@ -128,18 +128,39 @@ Java_ru_gigapisar_app_LocalLlm_nativeUnload(JNIEnv *, jclass) {
     unload();
 }
 
-// Ответ целиком. Пустая строка — ошибка или отмена (подробности в logcat).
+// Ответ целиком на беседу (роли и тексты — параллельные массивы).
+// Пустая строка — ошибка или отмена (подробности в logcat).
+static std::string complete(std::vector<common_chat_msg> msgs, int max_tokens, float temperature);
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_ru_gigapisar_app_LocalLlm_nativeComplete(JNIEnv *env, jclass, jstring jsystem, jstring juser,
                                               jint max_tokens, jfloat temperature) {
-    if (!g_ctx || !g_model) return env->NewStringUTF("");
-    g_cancel.store(false);
-
-    common_chat_templates_inputs in;
     common_chat_msg sys, usr;
     sys.role = "system"; sys.content = jstr(env, jsystem);
     usr.role = "user";   usr.content = jstr(env, juser);
-    in.messages = {sys, usr};
+    return env->NewStringUTF(complete({sys, usr}, max_tokens, temperature).c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_ru_gigapisar_app_LocalLlm_nativeCompleteChat(JNIEnv *env, jclass, jobjectArray roles, jobjectArray contents,
+                                                  jint max_tokens, jfloat temperature) {
+    std::vector<common_chat_msg> msgs;
+    const int n = env->GetArrayLength(roles);
+    for (int i = 0; i < n; i++) {
+        common_chat_msg m;
+        m.role = jstr(env, (jstring) env->GetObjectArrayElement(roles, i));
+        m.content = jstr(env, (jstring) env->GetObjectArrayElement(contents, i));
+        msgs.push_back(m);
+    }
+    return env->NewStringUTF(complete(msgs, max_tokens, temperature).c_str());
+}
+
+static std::string complete(std::vector<common_chat_msg> msgs, int max_tokens, float temperature) {
+    if (!g_ctx || !g_model) return "";
+    g_cancel.store(false);
+
+    common_chat_templates_inputs in;
+    in.messages = msgs;
     in.add_generation_prompt = true;
     in.use_jinja = true;
     in.enable_thinking = false;
@@ -148,17 +169,18 @@ Java_ru_gigapisar_app_LocalLlm_nativeComplete(JNIEnv *env, jclass, jstring jsyst
         prompt = common_chat_templates_apply(g_tmpls.get(), in).prompt;
     } catch (const std::exception &e) {
         LOGE("шаблон чата: %s — беру простой формат", e.what());
-        prompt = sys.content + "\n\n" + usr.content + "\n\n";
+        for (const auto &m : msgs) prompt += m.role + ": " + m.content + "\n\n";
+        prompt += "assistant: ";
     }
 
     std::vector<llama_token> tokens = common_tokenize(g_ctx, prompt, true, true);
     const int room = g_ctx_size - 8;
     if ((int) tokens.size() > room) {
         LOGE("текст слишком длинный для контекста: %d токенов", (int) tokens.size());
-        return env->NewStringUTF("");
+        return "";
     }
     llama_memory_clear(llama_get_memory(g_ctx), true);
-    if (!decode(tokens, 0)) return env->NewStringUTF("");
+    if (!decode(tokens, 0)) return "";
     int pos = (int) tokens.size();
 
     llama_sampler *smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
@@ -180,6 +202,6 @@ Java_ru_gigapisar_app_LocalLlm_nativeComplete(JNIEnv *env, jclass, jstring jsyst
         if (llama_decode(g_ctx, g_batch) != 0) { LOGE("llama_decode не удался"); break; }
     }
     llama_sampler_free(smpl);
-    if (g_cancel.load()) return env->NewStringUTF("");
-    return env->NewStringUTF(out.c_str());
+    if (g_cancel.load()) return "";
+    return out;
 }

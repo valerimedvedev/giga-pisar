@@ -17,6 +17,7 @@ object LocalLlm {
     @JvmStatic private external fun nativeLoad(path: String, threads: Int, ctx: Int): Int
     @JvmStatic private external fun nativeLoaded(): Boolean
     @JvmStatic private external fun nativeComplete(system: String, user: String, maxTokens: Int, temperature: Float): String
+    @JvmStatic private external fun nativeCompleteChat(roles: Array<String>, contents: Array<String>, maxTokens: Int, temperature: Float): String
     @JvmStatic private external fun nativeCancel()
     @JvmStatic private external fun nativeUnload()
 
@@ -35,13 +36,11 @@ object LocalLlm {
         }
     }
 
-    /** Ответ на пару сообщений (системная инструкция + текст). */
+    /** Ответ на беседу: системная инструкция и все реплики по порядку. */
     @Synchronized
     fun chat(messages: List<ChatMessage>, maxTokens: Int = 1024, temperature: Float = 0.3f): String {
         check(nativeLoaded()) { "нейронка не загружена" }
-        val system = messages.firstOrNull { it.role == "system" }?.content ?: ""
-        val user = messages.lastOrNull { it.role == "user" }?.content ?: ""
-        val out = nativeComplete(system, user, maxTokens, temperature)
+        val out = nativeCompleteChat(messages.map { it.role }.toTypedArray(), messages.map { it.content }.toTypedArray(), maxTokens, temperature)
         if (out.isEmpty()) throw IOException("нейронка ничего не ответила")
         return Brain.stripThinking(out).trim()
     }

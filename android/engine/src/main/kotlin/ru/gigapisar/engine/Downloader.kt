@@ -16,6 +16,34 @@ object Downloader {
      */
     fun download(url: String, dest: File, cancel: AtomicBoolean = AtomicBoolean(false),
                  onProgress: (Long, Long) -> Unit = { _, _ -> }) {
+        // Связь с Hugging Face часто рвётся на больших файлах: докачиваем сами,
+        // до 40 попыток с паузой, а не показываем человеку «connection abort».
+        var attempt = 0
+        while (true) {
+            try { downloadOnce(url, dest, cancel, onProgress); return }
+            catch (e: NotFound) { throw e }
+            catch (e: IOException) {
+                if (cancel.get() || e.message == "отменено") throw IOException("отменено")
+                if (++attempt > 40) throw IOException("связь рвётся раз за разом (${friendly(e)}); нажмите «Скачать» позже — докачается с этого места")
+                Thread.sleep(minOf(2000L * attempt, 15_000L))
+            }
+        }
+    }
+
+    /** Понятная причина вместо английского сообщения из недр Java. */
+    fun friendly(e: Throwable): String {
+        val m = (e.message ?: e.javaClass.simpleName).lowercase()
+        return when {
+            "connection abort" in m || "connection reset" in m || "broken pipe" in m || "unexpected end" in m -> "связь оборвалась"
+            "timed out" in m || "timeout" in m -> "сервер не отвечает"
+            "unable to resolve host" in m || "no address associated" in m -> "нет интернета или не найден адрес"
+            "no space" in m || "enospc" in m -> "кончилось место на телефоне"
+            "certificate" in m || "ssl" in m -> "ошибка защищённого соединения"
+            else -> e.message ?: e.javaClass.simpleName
+        }
+    }
+
+    private fun downloadOnce(url: String, dest: File, cancel: AtomicBoolean, onProgress: (Long, Long) -> Unit) {
         val part = File(dest.path + ".part")
         var have = if (part.exists()) part.length() else 0L
         val c = URL(url).openConnection() as HttpURLConnection

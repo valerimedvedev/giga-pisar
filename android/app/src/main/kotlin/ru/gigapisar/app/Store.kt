@@ -25,7 +25,8 @@ class Store(context: Context) {
     var asrThreads: Int get() = p.getInt("asr.threads", 4); set(v) = p.edit().putInt("asr.threads", v).apply()
     var llmThreads: Int get() = p.getInt("llm.threads", 4); set(v) = p.edit().putInt("llm.threads", v).apply()
     var liveInsert: Boolean get() = p.getBoolean("live", true); set(v) = p.edit().putBoolean("live", v).apply()
-    var dictaphone: Boolean get() = p.getBoolean("dictaphone", false); set(v) = p.edit().putBoolean("dictaphone", v).apply()
+    var mode: String get() = p.getString("mode", "dictation")!!; set(v) = p.edit().putString("mode", v).apply()
+    var promptChat: String get() = p.getString("prompt.chat", "")!!.ifBlank { CHAT_PROMPT }; set(v) = p.edit().putString("prompt.chat", v).apply()
     var autoTidy: Boolean get() = p.getBoolean("autoTidy", false); set(v) = p.edit().putBoolean("autoTidy", v).apply()
 
     // ── команды и промпты (как на вкладке «Мозг» плагина)
@@ -63,5 +64,8 @@ class Store(context: Context) {
     fun historyPin(text: String) { history = history.map { if (it.text == text) it.copy(pinned = !it.pinned) else it } }
     fun historyRemove(text: String) { history = history.filter { it.text != text } }
 
-    companion object { const val HISTORY_MAX = 100 }
+    companion object {
+        const val HISTORY_MAX = 100
+        const val CHAT_PROMPT = "Ты — помощник в приложении «Гига Писарь». Отвечай по-русски, кратко и по делу, без лишних вступлений. Если просят написать текст — пиши сразу готовый текст."
+    }
 }

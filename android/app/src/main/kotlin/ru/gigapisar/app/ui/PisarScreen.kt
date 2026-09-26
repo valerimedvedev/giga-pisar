@@ -40,6 +40,16 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.foundation.layout.Box
 import androidx.core.content.FileProvider
 import java.io.File
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.font.FontWeight
+import ru.gigapisar.engine.Export
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.AlertDialog
@@ -99,6 +109,19 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) vm.startRecording()
         else askMic.launch(Manifest.permission.RECORD_AUDIO)
     }
+    // экспорт: файл сохраняется туда, куда укажет человек (Документы, Диск…)
+    var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
+    fun writeExport(uri: android.net.Uri?) {
+        val bytes = pendingExport ?: return
+        pendingExport = null
+        if (uri == null) return
+        runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }
+    }
+    val saveTxt = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { writeExport(it) }
+    val saveMd = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { writeExport(it) }
+    val saveDocx = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.wordprocessingml.document")) { writeExport(it) }
+    var exportMenu by remember { mutableStateOf(false) }
+    fun exportName() = "Гига Писарь " + java.text.SimpleDateFormat("yyyy-MM-dd HH-mm", java.util.Locale.US).format(java.util.Date())
     fun share(f: File) {
         val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
         ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "audio/wav"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, "Отправить запись"))
@@ -109,11 +132,20 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
             TopAppBar(
                 title = { Text("Гига Писарь") },
                 actions = {
-                    IconButton(onClick = { clipboard.setText(AnnotatedString(vm.text.text)) }, enabled = vm.text.text.isNotEmpty()) { Icon(Icons.Default.ContentCopy, "Копировать") }
+                    val content = vm.exportText()
+                    IconButton(onClick = { clipboard.setText(AnnotatedString(content)) }, enabled = content.isNotEmpty()) { Icon(Icons.Default.ContentCopy, "Копировать") }
                     IconButton(onClick = {
-                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, vm.text.text) }, "Отправить текст"))
-                    }, enabled = vm.text.text.isNotEmpty()) { Icon(Icons.Default.Share, "Отправить") }
-                    IconButton(onClick = { vm.clearText() }, enabled = vm.text.text.isNotEmpty() && !ui.recording) { Icon(Icons.Default.Delete, "Очистить") }
+                        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, content) }, "Отправить текст"))
+                    }, enabled = content.isNotEmpty()) { Icon(Icons.Default.Share, "Отправить") }
+                    Box {
+                        IconButton(onClick = { exportMenu = true }, enabled = content.isNotEmpty()) { Icon(Icons.Default.FileDownload, "Сохранить в файл") }
+                        DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                            DropdownMenuItem(text = { Text("Word (.docx)") }, onClick = { exportMenu = false; pendingExport = Export.docx(content); saveDocx.launch(exportName() + ".docx") })
+                            DropdownMenuItem(text = { Text("Markdown (.md)") }, onClick = { exportMenu = false; pendingExport = Export.md(content); saveMd.launch(exportName() + ".md") })
+                            DropdownMenuItem(text = { Text("Текст (.txt)") }, onClick = { exportMenu = false; pendingExport = Export.txt(content); saveTxt.launch(exportName() + ".txt") })
+                        }
+                    }
+                    IconButton(onClick = { if (ui.mode == "chat") vm.clearChat() else vm.clearText() }, enabled = content.isNotEmpty() && !ui.recording) { Icon(Icons.Default.Delete, "Очистить") }
                     IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Настройки") }
                 },
             )
@@ -121,12 +153,12 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().imePadding().padding(horizontal = 12.dp)) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                SegmentedButton(selected = !ui.dictaphone, onClick = { vm.setDictaphone(false) }, enabled = !ui.recording,
-                    shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Диктовка") }
-                SegmentedButton(selected = ui.dictaphone, onClick = { vm.setDictaphone(true) }, enabled = !ui.recording,
-                    shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Диктофон") }
+                val modes = listOf("dictation" to "Диктовка", "dictaphone" to "Диктофон", "chat" to "Общение")
+                for ((i, m) in modes.withIndex()) SegmentedButton(selected = ui.mode == m.first, onClick = { vm.setMode(m.first) },
+                    enabled = !ui.recording && !ui.busy, shape = SegmentedButtonDefaults.itemShape(i, modes.size)) { Text(m.second) }
             }
-            OutlinedTextField(
+            if (ui.mode == "chat") ChatView(vm, Modifier.fillMaxWidth().weight(1f))
+            else OutlinedTextField(
                 value = vm.text,
                 onValueChange = vm::onTextChange,
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -152,7 +184,7 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
                     Kind.OK -> Color(0xFF2E7D32); Kind.WARN -> Color(0xFFEF6C00); Kind.ERROR -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                maxLines = 4, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
             )
             if (ui.dictaphone && !ui.recording && ui.records.isNotEmpty()) RecordsList(vm, onShare = ::share)
@@ -179,7 +211,16 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
                         else -> "Запись"
                     }, style = MaterialTheme.typography.titleMedium)
                 }
-                OutlinedButton(
+                if (ui.mode == "chat") Button(
+                    onClick = { vm.sendChat() },
+                    enabled = !ui.recording && !ui.thinking && vm.chatInput.text.isNotBlank(),
+                    modifier = Modifier.weight(1f).height(60.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (ui.thinking) "Думает…" else "Отправить", style = MaterialTheme.typography.titleMedium)
+                } else OutlinedButton(
                     onClick = { if (vm.brainEnabled) brainOpen = true else onSettings() },
                     enabled = !ui.recording,
                     modifier = Modifier.weight(1f).height(60.dp),
@@ -284,5 +325,39 @@ private fun RecordsList(vm: PisarViewModel, onShare: (File) -> Unit) {
                 }
             }
         }
+    }
+}
+
+
+/** Общение: беседа пузырями и поле вопроса (диктовка идёт в него). */
+@Composable
+private fun ChatView(vm: PisarViewModel, modifier: Modifier) {
+    val ui by vm.ui.collectAsState()
+    val list = rememberLazyListState()
+    LaunchedEffect(ui.chat.size) { if (ui.chat.isNotEmpty()) list.animateScrollToItem(ui.chat.size - 1) }
+    Column(modifier) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f), state = list) {
+            if (ui.chat.isEmpty()) item {
+                Text(if (vm.brainEnabled) "Спросите что угодно или попросите написать текст. Нейронка: ${vm.settings.brainMode.let { when (it) { "phone" -> "на телефоне"; "pc" -> "на компьютере"; else -> "на сервере" } }}. Беседа никуда не сохраняется."
+                     else "Для общения включите мозг в настройках (⚙ → Мозг).",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+            }
+            items(ui.chat) { m ->
+                val mine = m.role == "user"
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+                    Card(colors = CardDefaults.cardColors(containerColor = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth(0.88f)) {
+                        Text(if (mine) "Вы" else "Писарь", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp, top = 6.dp))
+                        Text(m.content, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp, top = 2.dp))
+                    }
+                }
+            }
+        }
+        OutlinedTextField(
+            value = vm.chatInput, onValueChange = vm::onChatInputChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            placeholder = { Text("Вопрос или задание — напишите или надиктуйте («Запись»)") },
+            maxLines = 5, readOnly = ui.thinking,
+        )
     }
 }

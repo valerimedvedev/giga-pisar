@@ -56,6 +56,22 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
     }) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
+            ui.progress?.let { p ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(p.label, style = MaterialTheme.typography.titleSmall)
+                        if (p.total > 0) {
+                            Text("${p.done / 1_000_000} из ${p.total / 1_000_000} МБ · ${100 * p.done / p.total}%", style = MaterialTheme.typography.bodySmall)
+                            androidx.compose.material3.LinearProgressIndicator(progress = { p.done.toFloat() / p.total }, Modifier.fillMaxWidth())
+                        } else androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("Связь оборвётся — докачается сама с того же места. Остановить можно, недокачанное сохранится.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { vm.cancelDownload() }) { Text("Остановить") }
+                    }
+                }
+            }
+            if (ui.kind == PisarViewModel.Kind.ERROR || ui.kind == PisarViewModel.Kind.WARN) Text(ui.status, style = MaterialTheme.typography.bodyMedium,
+                color = if (ui.kind == PisarViewModel.Kind.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary)
+
             Section("Распознавание речи") {
                 Text(if (ui.modelReady) "Пакет GigaAM v3 на телефоне (213 МБ). Звук никуда не уходит." else "Пакет распознавания ещё не скачан.", style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -85,8 +101,11 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
                             Text(m.name, style = MaterialTheme.typography.bodyMedium)
                             Text("${m.sizeGb} ГБ · память ${m.ramGb} ГБ · ${m.about}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        val part = java.io.File(vm.models.llmFile(m).path + ".part")
+                        val downloadingThis = ui.progress?.label == m.name
                         if (have) TextButton(onClick = { vm.deleteLlm(vm.models.llmFile(m)) }, enabled = !ui.busy) { Text("Удалить") }
-                        else TextButton(onClick = { vm.downloadLlm(m) }, enabled = !ui.busy) { Text("Скачать") }
+                        else if (downloadingThis) Text("${ui.progress?.let { if (it.total > 0) "${100 * it.done / it.total}%" else "…" }}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 12.dp))
+                        else TextButton(onClick = { vm.downloadLlm(m) }, enabled = !ui.busy) { Text(if (part.exists()) "Докачать (${part.length() / 1_000_000} МБ есть)" else "Скачать") }
                     }
                 }
                 val own = vm.models.installedLlm().filter { f -> Catalog.PHONE.none { it.file == f.name } }
@@ -118,10 +137,12 @@ fun SettingsScreen(vm: PisarViewModel, onBack: () -> Unit) {
             Section("Промпты нейронке") {
                 var d by remember(s.promptDictation) { mutableStateOf(s.promptDictation) }
                 var sel by remember(s.promptSelection) { mutableStateOf(s.promptSelection) }
+                var ch by remember(s.promptChat) { mutableStateOf(s.promptChat) }
                 OutlinedTextField(d, { d = it }, Modifier.fillMaxWidth(), label = { Text("Для надиктованного") }, minLines = 3)
                 OutlinedTextField(sel, { sel = it }, Modifier.fillMaxWidth(), label = { Text("Для выделенного текста") }, minLines = 3)
+                OutlinedTextField(ch, { ch = it }, Modifier.fillMaxWidth(), label = { Text("Для режима «Общение»") }, minLines = 2)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { vm.save(s.copy(promptDictation = d, promptSelection = sel)) }, enabled = d != s.promptDictation || sel != s.promptSelection) { Text("Сохранить") }
+                    Button(onClick = { vm.save(s.copy(promptDictation = d, promptSelection = sel, promptChat = ch)) }, enabled = d != s.promptDictation || sel != s.promptSelection || ch != s.promptChat) { Text("Сохранить") }
                     OutlinedButton(onClick = { vm.resetPrompts() }) { Text("Вернуть образец") }
                 }
             }
