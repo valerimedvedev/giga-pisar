@@ -35,6 +35,7 @@ import java.net.NetworkInterface
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.pow
 
 /** Всё живое состояние приложения: текст, запись, мозг, скачивания, настройки. */
 class PisarViewModel(app: Application) : AndroidViewModel(app) {
@@ -53,6 +54,13 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val askDownload: Boolean = false,   // первая диктовка: спросить согласие на 213 МБ
         val modelReady: Boolean = false,
         val words: Int = 0,
+        // диктофон
+        val dictaphone: Boolean = false,    // режим диктофона включён
+        val recSeconds: Double = 0.0,       // длина текущей записи
+        val paused: Boolean = false,
+        val parts: Int = 0,                 // сколько частей уже распознано
+        val records: List<File> = emptyList(),
+        val transcribing: File? = null,     // расшифровка старой записи идёт
     )
     data class Settings(
         val brainMode: String, val phoneModel: String,
@@ -62,7 +70,8 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         val chips: List<Chip>, val promptDictation: String, val promptSelection: String,
     )
 
-    private val _ui = MutableStateFlow(Ui(modelReady = models.hasGigaAm()))
+    private val recordsDir = File(app.filesDir, "records").apply { mkdirs() }
+    private val _ui = MutableStateFlow(Ui(modelReady = models.hasGigaAm(), dictaphone = store.dictaphone, records = listRecords()))
     val ui = _ui.asStateFlow()
 
     /** Текст поля — единственный источник правды, поле его только показывает. */
@@ -80,6 +89,9 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     private var rnnt: Rnnt? = null
     private var mic: Mic? = null
     private var chunker: LiveChunker? = null
+    private var recorder: Recorder? = null          // диктофон: файл записи
+    @Volatile private var paused = false
+    private var recTimer: Job? = null
     private val jobs = ArrayList<Job>()
     private var snapshot: TextFieldValue? = null
     private val cancel = AtomicBoolean(false)
@@ -120,18 +132,35 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
         sessionText = ""; sessionLen = 0
         if (b > a) text = TextFieldValue(t.text.substring(0, a) + sessionTail, TextRange(a))   // диктовка заменяет выделенное
         jobs.clear()
-        val ch = LiveChunker(16000)
+        val dictaphone = _ui.value.dictaphone
+        // диктофон: части длиннее, паузы режут абзацами, звук пишется в файл
+        val ch = if (dictaphone) LiveChunker(16000, pauseSeconds = 1.0, maxSeconds = 20.0) else LiveChunker(16000)
         chunker = ch
-        val live = settings.liveInsert
+        val live = settings.liveInsert || dictaphone
+        var rec: Recorder? = null
+        if (dictaphone) {
+            val name = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US).format(java.util.Date())
+            rec = Recorder(File(recordsDir, "$name.wav"))
+            recorder = rec
+            paused = false
+            runCatching { RecorderService.start(getApplication()) }
+        }
         val m = Mic { buf, n ->
+            if (paused) return@Mic
+            rec?.write(buf, n)
             val chunk = ch.push(buf, n)
             if (chunk != null && live) enqueue(chunk)
             else if (chunk != null) synchronized(pendingChunks) { pendingChunks.add(chunk) }
         }
-        try { m.start() } catch (e: Exception) { status(e.message ?: "микрофон не открылся", Kind.ERROR); return }
+        try { m.start() } catch (e: Exception) { rec?.close(); recorder = null; status(e.message ?: "микрофон не открылся", Kind.ERROR); return }
         mic = m
-        _ui.update { it.copy(recording = true, canUndo = false) }
-        status("Слушаю… говорите")
+        _ui.update { it.copy(recording = true, canUndo = false, paused = false, recSeconds = 0.0, parts = 0) }
+        if (dictaphone) {
+            status("● Диктофон пишет — говорите; пауза длиннее 2,5 с начнёт новый абзац")
+            recTimer = viewModelScope.launch {
+                while (true) { kotlinx.coroutines.delay(500); rec?.flushHeader(); _ui.update { it.copy(recSeconds = rec?.seconds ?: 0.0) } }
+            }
+        } else status("Слушаю… говорите")
         viewModelScope.launch { runCatching { recognizer() }.onFailure { status("модель не загрузилась: ${it.message}", Kind.ERROR) } }
     }
 
@@ -144,17 +173,27 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
             val piece = r.transcribe(chunk)
             val ms = (System.nanoTime() - t0) / 1_000_000
             if (piece.isNotEmpty()) withContext(Dispatchers.Main) {
-                appendSession(piece)
-                if (_ui.value.recording) status("Слушаю… (${chunk.size / 16000} с → $ms мс)")
+                val newParagraph = _ui.value.dictaphone && trailingQuiet(chunk) >= 2.5 * 16000
+                appendSession(piece, newParagraph)
+                _ui.update { it.copy(parts = it.parts + 1) }
+                if (_ui.value.recording && !_ui.value.dictaphone) status("Слушаю… (${chunk.size / 16000} с → $ms мс)")
             }
         }
         synchronized(jobs) { jobs.add(job) }
     }
 
     /** Дописывает распознанную фразу в поле, туда, где идёт диктовка. */
-    private fun appendSession(piece: String) {
-        sessionText = if (sessionText.isEmpty()) piece else "$sessionText $piece"
+    private fun appendSession(piece: String, newParagraph: Boolean = false) {
+        sessionText = if (sessionText.isEmpty()) piece else sessionText + (if (newParagraph) "\n\n" else " ") + piece
         placeSession(sessionText)
+    }
+
+    /** Сколько тишины в хвосте куска (отсчётов) — длинная пауза значит новый абзац. */
+    private fun trailingQuiet(chunk: FloatArray): Int {
+        val th = 10.0.pow(-35.0 / 20.0).toFloat()
+        var n = 0
+        for (i in chunk.indices.reversed()) { if (kotlin.math.abs(chunk[i]) < th) n++ else break }
+        return n
     }
 
     private fun placeSession(s: String) {
@@ -172,7 +211,10 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     fun stopRecording() {
         val m = mic ?: return
         m.stop(); mic = null
-        _ui.update { it.copy(recording = false) }
+        recTimer?.cancel(); recTimer = null
+        recorder?.let { r -> r.close(); recorder = null; runCatching { RecorderService.stop(getApplication()) } }
+        paused = false
+        _ui.update { it.copy(recording = false, paused = false, records = listRecords()) }
         status("Распознаю…")
         synchronized(pendingChunks) { pendingChunks.forEach { enqueue(it) }; pendingChunks.clear() }
         chunker?.flush()?.let { enqueue(it) }
@@ -184,14 +226,79 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun finishSession() {
         val full = sessionText
-        if (full.isEmpty()) { status("Ничего не услышал", Kind.WARN); return }
+        if (full.isEmpty()) { status(if (_ui.value.dictaphone) "Запись сохранена, речи в ней не услышал" else "Ничего не услышал", Kind.WARN); return }
         val cmd = Brain.parseCommand(full)
         val brainOn = settings.brainMode != "off"
         when {
             cmd != null && brainOn -> replaceSession(cmd.body, cmd.command)
             cmd != null -> status("Команда «${cmd.command}» — мозг выключен, включите его в настройках", Kind.WARN)
             settings.autoTidy && brainOn -> replaceSession(full, settings.chips.firstOrNull()?.command ?: Brain.DEFAULT_CHIPS[0].command)
+            _ui.value.dictaphone -> status("Запись сохранена (${"%.0f".format(_ui.value.recSeconds)} с, ${_ui.value.parts} ч.), текст: ${wordCount(full)} сл. Мозг 🧠 причешет его целиком", Kind.OK)
             else -> status("Готово: ${wordCount(full)} сл.", Kind.OK)
+        }
+    }
+
+    // ─────────────────────────── диктофон ───────────────────────────
+
+    fun setDictaphone(on: Boolean) {
+        if (_ui.value.recording) return
+        store.dictaphone = on
+        _ui.update { it.copy(dictaphone = on) }
+        status(if (on) "Диктофон: длинная запись по частям — пауза, продолжение, файл остаётся" else "Нажмите «Запись» и говорите")
+    }
+
+    /** Пауза / продолжение записи диктофона: файл и текст продолжаются с того же места. */
+    fun togglePause() {
+        if (!_ui.value.recording || recorder == null) return
+        paused = !paused        // буфер нарезки не сбрасываем: недоговорённая фраза доживёт до следующей паузы
+        _ui.update { it.copy(paused = paused) }
+        status(if (paused) "⏸ Пауза — нажмите «Продолжить», чтобы дописать" else "● Диктофон пишет дальше")
+    }
+
+    fun listRecords(): List<File> = recordsDir.listFiles { f -> f.name.endsWith(".wav") }?.sortedByDescending { it.name } ?: emptyList()
+
+    fun deleteRecord(f: File) { f.delete(); _ui.update { it.copy(records = listRecords()) } }
+
+    fun renameRecord(f: File, name: String) {
+        val clean = name.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { return }
+        val dest = File(recordsDir, if (clean.endsWith(".wav")) clean else "$clean.wav")
+        if (f.renameTo(dest)) _ui.update { it.copy(records = listRecords()) }
+    }
+
+    /**
+     * Расшифровать запись заново: файл читается по частям (по паузам, не длиннее
+     * 20 с), каждая часть встаёт в поле сразу — длинная запись не заставляет ждать.
+     */
+    fun transcribeRecord(f: File) {
+        if (_ui.value.busy || _ui.value.recording) return
+        if (!models.hasGigaAm()) { _ui.update { it.copy(askDownload = true) }; return }
+        _ui.update { it.copy(busy = true, transcribing = f) }
+        val t = text
+        sessionStart = t.selection.min; sessionTail = t.text.substring(t.selection.max); sessionText = ""; sessionLen = 0
+        if (t.selection.max > sessionStart) text = TextFieldValue(t.text.substring(0, sessionStart) + sessionTail, TextRange(sessionStart))
+        viewModelScope.launch(asr) {
+            try {
+                val r = recognizer()
+                val audio = ru.gigapisar.engine.Wav.read(f.readBytes())
+                val samples = ru.gigapisar.engine.Wav.resample(audio.samples, audio.rate, r.sampleRate)
+                val total = samples.size.toDouble() / r.sampleRate
+                val bounds = ru.gigapisar.engine.Chunker.chunkBounds(total, ru.gigapisar.engine.Chunker.silences(samples, r.sampleRate), 20.0)
+                var n = 0
+                for ((a, b) in bounds) {
+                    val from = (a * r.sampleRate).toInt(); val to = minOf(samples.size, (b * r.sampleRate).toInt())
+                    if (to <= from) continue
+                    val chunk = samples.copyOfRange(from, to)
+                    val piece = r.transcribe(chunk)
+                    n++
+                    withContext(Dispatchers.Main) {
+                        if (piece.isNotEmpty()) appendSession(piece, trailingQuiet(chunk) >= 2.5 * r.sampleRate)
+                        status("Расшифровываю ${f.name}: часть $n из ${bounds.size}")
+                    }
+                }
+                withContext(Dispatchers.Main) { status("Готово: ${f.name}, ${wordCount(sessionText)} сл.", Kind.OK) }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { status("Не расшифровал: ${e.message}", Kind.ERROR) }
+            } finally { _ui.update { it.copy(busy = false, transcribing = null) } }
         }
     }
 
@@ -385,6 +492,7 @@ class PisarViewModel(app: Application) : AndroidViewModel(app) {
     } catch (_: Exception) { false }
 
     override fun onCleared() {
+        recorder?.close(); runCatching { RecorderService.stop(getApplication()) }
         mic?.stop(); rnnt?.close(); LocalLlm.unload(); asr.close(); llm.close()
     }
 

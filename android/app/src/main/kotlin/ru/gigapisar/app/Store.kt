@@ -25,6 +25,7 @@ class Store(context: Context) {
     var asrThreads: Int get() = p.getInt("asr.threads", 4); set(v) = p.edit().putInt("asr.threads", v).apply()
     var llmThreads: Int get() = p.getInt("llm.threads", 4); set(v) = p.edit().putInt("llm.threads", v).apply()
     var liveInsert: Boolean get() = p.getBoolean("live", true); set(v) = p.edit().putBoolean("live", v).apply()
+    var dictaphone: Boolean get() = p.getBoolean("dictaphone", false); set(v) = p.edit().putBoolean("dictaphone", v).apply()
     var autoTidy: Boolean get() = p.getBoolean("autoTidy", false); set(v) = p.edit().putBoolean("autoTidy", v).apply()
 
     // ── команды и промпты (как на вкладке «Мозг» плагина)

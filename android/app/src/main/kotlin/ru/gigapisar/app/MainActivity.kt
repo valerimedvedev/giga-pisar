@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (vm.ui.value.recording) vm.stopRecording()   // ушли из приложения — запись останавливаем
+        // ушли из приложения — диктовку останавливаем; диктофон пишет дальше (служба держит микрофон)
+        if (vm.ui.value.recording && !vm.ui.value.dictaphone) vm.stopRecording()
     }
 }

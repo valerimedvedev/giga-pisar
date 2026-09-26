@@ -32,6 +32,14 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.foundation.layout.Box
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.AlertDialog
@@ -82,10 +90,18 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) vm.startRecording()
     }
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     fun record() {
         if (ui.recording) { vm.stopRecording(); return }
+        if (ui.dictaphone && android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)   // уведомление «идёт запись»; без него тоже работает
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) vm.startRecording()
         else askMic.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    fun share(f: File) {
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+        ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "audio/wav"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, "Отправить запись"))
     }
 
     Scaffold(
@@ -104,6 +120,12 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().imePadding().padding(horizontal = 12.dp)) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                SegmentedButton(selected = !ui.dictaphone, onClick = { vm.setDictaphone(false) }, enabled = !ui.recording,
+                    shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Диктовка") }
+                SegmentedButton(selected = ui.dictaphone, onClick = { vm.setDictaphone(true) }, enabled = !ui.recording,
+                    shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Диктофон") }
+            }
             OutlinedTextField(
                 value = vm.text,
                 onValueChange = vm::onTextChange,
@@ -133,7 +155,16 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
             )
+            if (ui.dictaphone && !ui.recording && ui.records.isNotEmpty()) RecordsList(vm, onShare = ::share)
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (ui.dictaphone && ui.recording) OutlinedButton(
+                    onClick = { vm.togglePause() },
+                    modifier = Modifier.weight(1f).height(60.dp),
+                ) {
+                    Icon(if (ui.paused) Icons.Default.PlayArrow else Icons.Default.Pause, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (ui.paused) "Продолжить" else "Пауза", style = MaterialTheme.typography.titleMedium)
+                }
                 Button(
                     onClick = { record() },
                     enabled = !ui.busy,
@@ -142,7 +173,11 @@ fun PisarScreen(vm: PisarViewModel, onSettings: () -> Unit) {
                 ) {
                     Icon(if (ui.recording) Icons.Default.Stop else Icons.Default.Mic, null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (ui.recording) "Стоп" else "Запись", style = MaterialTheme.typography.titleMedium)
+                    Text(when {
+                        ui.recording && ui.dictaphone -> "Стоп ${(ui.recSeconds / 60).toInt()}:${"%02d".format((ui.recSeconds % 60).toInt())}"
+                        ui.recording -> "Стоп"
+                        else -> "Запись"
+                    }, style = MaterialTheme.typography.titleMedium)
                 }
                 OutlinedButton(
                     onClick = { if (vm.brainEnabled) brainOpen = true else onSettings() },
@@ -222,6 +257,31 @@ fun BrainSheet(vm: PisarViewModel, onClose: () -> Unit, onSettings: () -> Unit) 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.undo(); onClose() }, enabled = ui.canUndo) { Text("Вернуть как было") }
                 if (ui.busy && ui.progress == null) OutlinedButton(onClick = { vm.cancelBrain() }) { Text("Прервать") }
+            }
+        }
+    }
+}
+
+
+/** Записи диктофона: расшифровать заново, отправить, удалить. */
+@Composable
+private fun RecordsList(vm: PisarViewModel, onShare: (File) -> Unit) {
+    val ui by vm.ui.collectAsState()
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        TextButton(onClick = { open = !open }) { Text((if (open) "▾ " else "▸ ") + "Записи диктофона: ${ui.records.size}") }
+        if (open) LazyColumn(Modifier.heightIn(max = 180.dp)) {
+            items(ui.records, key = { it.path }) { f ->
+                val sec = ru.gigapisar.app.Recorder.durationOf(f)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.name.removeSuffix(".wav"), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${(sec / 60).toInt()}:${"%02d".format((sec % 60).toInt())} · ${f.length() / 1_000_000} МБ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { vm.transcribeRecord(f) }, enabled = !ui.busy) { Text(if (ui.transcribing == f) "…" else "В текст") }
+                    IconButton(onClick = { onShare(f) }) { Icon(Icons.Default.Share, "Отправить запись") }
+                    IconButton(onClick = { vm.deleteRecord(f) }, enabled = !ui.busy) { Icon(Icons.Default.Delete, "Удалить запись") }
+                }
             }
         }
     }
